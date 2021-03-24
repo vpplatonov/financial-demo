@@ -12,6 +12,8 @@ on:
 env:
   AWS_REGION: us-west-2
   AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
+  AWS_ECR_REPOSITORY: financial-demo
+  AWS_S3_NAME: rasa-financial-demo
   
 jobs:
   params:
@@ -29,6 +31,8 @@ jobs:
       docker_tag: ${{ steps.action_server.outputs.docker_tag }}
       
       do_training: ${{ steps.rasa_model.outputs.do_training }}
+      rasa_model_name: ${{ steps.rasa_model.outputs.rasa_model_name }}
+      rasa_model_path: ${{ steps.rasa_model.outputs.rasa_model_path }}
       
       aws_region: ${{ steps.aws.outputs.aws_region }}
       aws_s3: ${{ steps.aws.outputs.aws_s3 }}
@@ -46,7 +50,7 @@ jobs:
       - name: versions
         id: versions
         run: |
-          rasa_version=$( cat requirements.txt | grep 'rasa\[spacy\]' | cut -d'=' -f 3 )
+          rasa_version=$( cat requirements.txt | grep 'rasa\[spacy\]' | cut -d'=' -f 3 )-spacy-en
           rasa_sdk_version=$( cat requirements.txt | grep 'rasa-sdk' | cut -d'=' -f 3 )
           
           echo "::set-output name=rasa_version::$rasa_version"
@@ -62,8 +66,8 @@ jobs:
             echo "::set-output name=do_action_server::false"
           fi
           
-          if [[ github.ref == 'refs/heads/master' ]] || \
-             [[ github.head_ref == 'refs/heads/master' ]] 
+          if [[ github.ref == 'refs/heads/main' ]] || \
+             [[ github.head_ref == 'refs/heads/main' ]] 
           then
             echo "::set-output name=docker_registry::docker.io"
             echo "::set-output name=docker_user::oakela"
@@ -72,7 +76,7 @@ jobs:
           else
             echo "::set-output name=docker_registry::${{ env.AWS_ECR_URI }}"
             echo "::set-output name=docker_user::AWS"
-            echo "::set-output name=docker_image::financial-demo"
+            echo "::set-output name=docker_image::${{ env.AWS_ECR_REPOSITORY }}"
             # branch name
             echo "::set-output name=docker_tag::${GITHUB_REF##*/}"
           fi
@@ -87,6 +91,17 @@ jobs:
             echo "::set-output name=do_training::true"
           else
             echo "::set-output name=do_training::false"
+          fi
+          
+          if [[ github.ref == 'refs/heads/main' ]] || \
+             [[ github.head_ref == 'refs/heads/main' ]] 
+          then
+            echo "::set-output name=rasa_model_name::latest"
+            echo "::set-output name=rasa_model_path::models/latest.tar.gz"
+          else
+            # branch name
+            echo "::set-output name=rasa_model_name::${GITHUB_REF##*/}"
+            echo "::set-output name=rasa_model_path::models/${GITHUB_REF##*/}.tar.gz"
           fi
       
       - name: aws
@@ -190,25 +205,26 @@ jobs:
           
       - name: Push docker image to AWS ECR
         run: |
-          # Retrieve an authentication token and authenticate Docker client to the registry.
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.AWS_ECR_URI }}
+          make aws-docker-login \
+            AWS_REGION=${{ env.AWS_REGION }} \
+            AWS_ECR_URI=${{ env.AWS_ECR_URI }}
           
           make docker-push \
             ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
           
-      - name: Push latest docker image to docker.io/rasa
-        if: |
-          github.ref == 'refs/heads/master' || github.head_ref == 'refs/heads/master'
-        run: |
-          echo "TODO - CHECK IT"
-          exit 1
-          make docker-login \
-            DOCKER_REGISTRY=${{ needs.params.outputs.docker_registry }} \
-            DOCKER_USER=${{ needs.params.outputs.docker_user }} \
-            DOCKER_PW=${{ secrets.DOCKERHUB_PASSWORD }}
-          
-          make docker-push \
-            ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
+#      - name: Push docker image to docker.io/rasa, when on main
+#        if: |
+#          github.ref == 'refs/heads/main' || github.head_ref == 'refs/heads/main'
+#        run: |
+#          echo "TODO - CHECK IT"
+#          exit 1
+#          make docker-login \
+#            DOCKER_REGISTRY=${{ needs.params.outputs.docker_registry }} \
+#            DOCKER_USER=${{ needs.params.outputs.docker_user }} \
+#            DOCKER_PW=${{ secrets.DOCKERHUB_PASSWORD }}
+#          
+#          make docker-push \
+#            ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
 
   rasa_model:
     name: rasa_model (to AWS S3)
@@ -229,19 +245,22 @@ jobs:
       - name: Rasa Train and Test GitHub Action
         uses: RasaHQ/rasa-train-test-gha@main
         with:
-          rasa_version: '2.4.0-spacy-en'
+          rasa_version: ${{ needs.params.outputs.rasa_version }}
+          rasa_train: true
+          train_args: --fixed-model-name ${{ needs.params.outputs.rasa_model_name }}
+          rasa_test: false
           test_type: all
-          data_validate: true
-          cross_validation: true
-          publish_summary: true
+          data_validate: false
+          cross_validation: false
+          publish_summary: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
  
-      - name: Upload rasa model to github artifact storage
-        if: github.ref == 'refs/heads/master'
-        uses: actions/upload-artifact@main
-        with:
-          name: model
-          path: models
+#      - name: Upload rasa model to github artifact storage
+#        if: github.ref == 'refs/heads/main'
+#        uses: actions/upload-artifact@main
+#        with:
+#          name: model
+#          path: models
           
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -250,21 +269,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.params.outputs.aws_region }}
           
-      - name: Create s3
+      - name: Upload rasa model to S3
         run: |
-          echo "TO BE IMPLEMENTED"
-          exit 1
-          
-      - name: Upload rasa model to s3
-        run: |
-          echo "TO BE IMPLEMENTED"
-          exit 1
+          make aws-s3-copy-rasa-model \
+            RASA_MODEL_PATH=${{ needs.params.outputs.rasa_model_path }}
 
   aws-infra:
     name:  aws-infra
     runs-on: ubuntu-latest
     needs: [params, action_server, rasa_model]
     steps:
+      - run: |
+          exit 1
       - name: checkout
         uses: actions/checkout@v2
       
@@ -323,8 +339,8 @@ jobs:
     steps:
       - name: set_upgrade_prod
         if: |
-            !(github.ref == 'refs/heads/master' 
-            || github.head_ref == 'refs/heads/master')
+            !(github.ref == 'refs/heads/main' 
+            || github.head_ref == 'refs/heads/main')
         run: echo "UPGRADE_PROD=true" >> $GITHUB_ENV
       
       - name: Upgrade prod
@@ -348,6 +364,7 @@ jobs:
  
 # TODO:
 # (-) reset config.yml epochs for DIET & TED
+# (-) in rasa_model, reset to true: data_validate, cross_validation & publish_summary
 # (-) Cleanup of infrastructure if an aws-sit steps fail
 #      https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#needs-context
 # (-) Delete docker image after successfull
@@ -355,3 +372,4 @@ jobs:
 # (-) Roll-back gcp-prod (= redeploy the backup) if gcp-prod-smoketest failed
 # (-) Use aws-sagemaker-gpu container to train the rasa model
 # (-) Makefile & Dockerfile to extract rasa_sdk version from requirements.txt
+# (-) Clean up Makefile help

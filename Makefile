@@ -3,10 +3,16 @@ ACTION_SERVER_DOCKERNAME ?= financial-demo
 ACTION_SERVER_PORT ?= 5056
 ACTION_SERVER_ENDPOINT_HEALTH ?= health
 
+RASA_MODEL_NAME ?= `git branch --show-current`
+RASA_MODEL_PATH ?= models/`git branch --show-current`.tar.gz
+
 # The CICD pipeline sets these as environment variables 
 # Set some defaults for when you're running locally
-STACK_NAME ?= findemo-$(USER)-test
-STACK_TYPE ?= $(USER)-test
+AWS_REGION ?= us-west-2
+AWS_ECR_URI ?= 024629701212.dkr.ecr.us-west-2.amazonaws.com
+AWS_S3_NAME ?= rasa-financial-demo
+AWS_STACK_NAME ?= financial-demo-$(USER)-test
+AWS_STACK_TYPE ?= $(USER)-test
 
 help:
 	@echo "make"
@@ -95,17 +101,45 @@ docker-login:
 docker-push:
 	@echo pushing image: $(ACTION_SERVER_DOCKERPATH)
 	docker image push $(ACTION_SERVER_DOCKERPATH)
+
+aws-docker-login:
+	@ echo Retrieving an authentication token and authenticating Docker client to the registry.
+	@echo logging into AWS ECR registry: $(AWS_ECR_URI)
+	aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(AWS_ECR_URI)
+	
+aws-s3-create:
+	@echo creating s3 bucket: $(AWS_S3_NAME)
+	aws s3api create-bucket \
+		--bucket $(AWS_S3_NAME) \
+		--region $(AWS_REGION) \
+		--create-bucket-configuration LocationConstraint=$(AWS_REGION)
+
+aws-s3-delete:
+	@echo deleting s3 bucket: $(AWS_S3_NAME)
+	aws s3 rb s3://$(AWS_S3_NAME) --force
+
+aws-s3-copy-rasa-model:
+	@echo copying $(RASA_MODEL_PATH) to s3://$(AWS_S3_NAME)/$(RASA_MODEL_PATH)
+	aws s3 cp $(RASA_MODEL_PATH) s3://$(AWS_S3_NAME)/$(RASA_MODEL_PATH)
 	
 aws-deploy-stack:
-	@echo deploying the AWS CloudFormation Stack with name: $(STACK_NAME)
+	@echo deploying the AWS CloudFormation Stack with name: $(AWS_STACK_NAME)
 	@echo $(NEWLINE)
 	aws cloudformation deploy \
 		--template-file aws/cloudformation/aws-deploy-stack.yml \
-		--tags findemo_stack_type=$(STACK_TYPE) \
-		--stack-name $(STACK_NAME) \
-		--parameter-overrides StackName=$(STACK_NAME)
+		--tags findemo_stack_type=$(AWS_STACK_TYPE) \
+		--stack-name $(AWS_STACK_NAME) \
+		--parameter-overrides StackName=$(AWS_STACK_NAME)
 		
 aws-delete-stack:
-	@echo deleting the AWS CloudFormation Stack with name: $(STACK_NAME)
+	@echo deleting the AWS CloudFormation Stack with name: $(AWS_STACK_NAME)
 	@echo $(NEWLINE)
-	aws cloudformation delete-stack --stack-name $(STACK_NAME)
+	aws cloudformation delete-stack --stack-name $(AWS_STACK_NAME)
+	
+rasa-train:
+	@echo Training $(RASA_MODEL_NAME)
+	rasa train --fixed-model-name $(RASA_MODEL_NAME)
+	
+rasa-test:
+	@echo Testing $(RASA_MODEL_PATH)
+	rasa test --model $(RASA_MODEL_PATH)

@@ -258,21 +258,202 @@ As part of the deployment, you'll need to set up [git integration](https://rasa.
 
 You will need to have docker installed in order to build the action server image. If you haven't made any changes to the action code, you can also use the [public image on Dockerhub](https://hub.docker.com/r/rasa/financial-demo) instead of building it yourself.
 
-
-See the Dockerfile for what is included in the action server image,
-
-To build the image:
+Build & tag the image:
 
 ```bash
-docker build . -t <name of your custom image>:<tag of your custom image>
+export ACTION_SERVER_DOCKERPATH=<dockerID>/<name-of-image>:<tag-of-image>
+make docker-build
 ```
 
-To test the container locally, you can then run the action server container with:
+Run the action server container:
 
 ```bash
-docker run -p 5055:5055 <name of your custom image>:<tag of your custom image>
+make docker-run
 ```
 
-Once you have confirmed that the container works as it should, you can push the container image to a registry with `docker push`
+Perform a smoke test on the health endpoint:
 
-It is recommended to use an [automated CI/CD process](https://rasa.com/docs/rasa/user-guide/setting-up-ci-cd) to keep your action server up to date in a production environment.
+```bash
+make docker-test
+```
+
+Once you have confirmed that the container works as it should, push the container image to a registry:
+
+```bash
+# login to a container registry with your credentials
+docker login  
+
+# check the registry logged into
+docker system info | grep Registry
+
+# push the action server image
+make docker-push
+```
+
+## CI/CD
+
+Tips on creating a [CI/CD pipeline](https://rasa.com/docs/rasa/user-guide/setting-up-ci-cd) for Rasa.
+
+### AWS
+
+#### Preparation
+
+The CI/CD pipeline of financial-demo uses AWS.
+
+After cloning or forking the financial-demo GitHub repository you must set up the following items before the pipeline can run.
+
+##### IAM User API Keys
+
+The CI/CD pipeline uses the [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html#cliv2-linux-install).
+
+The [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html#cliv2-linux-install) needs a set of IAM User API keys for authentication & authorization:
+
+- In your AWS Console, go to IAM dashboard to create a new set of API keys:
+
+  - Click on Users
+
+  - Click on Add user
+
+    - User name = findemo  *(The actual name is not important, we will never use this name directly)*
+
+      Choose "**programmatic access**." This allows you to use the aws cli to interact with AWS.
+
+    - Click on Next: Permissions
+
+      - Click on *Attach existing policies directly*
+
+        For IAM access, you can choose “**AdministratorAccess**”, or limit access to only what is needed by the CD pipeline.
+
+    - Click on Next: Tags
+
+    - Click on Next: Review
+
+    - Click on Create user
+
+    - Store in a safe location: `Access key ID` & `Secret access key`
+
+- In your Github repository, go to `Settings > Secrets`, and add two `New repository secrets` :
+
+  - AWS_ACCESS_KEY_ID = `Access key ID`
+  - AWS_SECRET_ACCESS_KEY = `Secret access key` 
+
+  This allows the GitHub actions to configure the aws cli.
+
+##### SSH Key Pair
+
+To be able to run `ansible` commands on an EC2 over SSH, you need an SSH Key Pair
+
+- In your AWS Console, create a Key Pair with the name `findemo`, and download the file `findemo.pem` which contains a public SSH key. *Note that the name `findemo` is important, since it is used by the CloudFormation template.*
+- TODO...add the `findemo.pem` (..get a fingerprint?) to GitHub, so the github actions can run ansible which uses SSH to run commands on the EC2 instance.
+
+##### AWS Elastic Container Registry (ECR)
+
+The CI/CD pipeline pushes the action server docker image to an ECR repository.
+
+Using the AWS ECR Console, create a private container registry, for example with name `financial-demo`.
+
+Update this section in the `CI/CD.yml` file:
+
+```yaml
+env:
+  AWS_REGION: us-west-2
+  AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
+  AWS_ECR_REPOSITORY: financial-demo
+```
+
+##### AWS S3 Bucket
+
+The CI/CD pipeline uploads the trained model to an S3 bucket.
+
+In the same AWS region as for the ECR, create an S3 bucket with a globally unique name. 
+
+You can do this in the AWS S3 Console, or by running this command
+
+```bash
+make aws-s3-create AWS_REGION=<...> AWS_S3_NAME=<...>
+```
+
+Then, update this section in the `CI/CD.yml`:
+
+```yaml
+env:
+  AWS_REGION: us-west-2
+  AWS_S3_NAME: rasa-financial-demo
+```
+
+
+
+#### Run the CI/CD pipeline manually
+
+The CI/CD steps are automatically run by the GitHub actions when you push changes but you can also run many steps manually from your local computer. This can help with bootstrapping & debugging.
+
+##### Preparation
+
+###### Install AWS CLI v2
+
+See the [installation instructions](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html).
+
+Check it works:
+
+```bash
+aws --version
+```
+
+###### Configure your AWS CLI
+
+```bash
+aws configure
+AWS Access Key ID [None]: -----          # See above: IAM User API Keys
+AWS Secret Access Key [None]: -------    # See above: IAM User API Keys
+Default region name [None]: us-west-2    # The CD pipeline uses us-west-2 
+Default output format [None]: 
+
+# verify it works
+aws s3 ls
+```
+
+##### job: action_server
+
+```bash
+# Test the python code
+pip install -r requirements-dev.txt
+make lint
+make types
+make test
+
+# Build, run & test the action server docker image
+make docker-build
+make docker-run
+make docker-test
+
+# Login & push the action server docker image
+make aws-docker-login
+make docker-push
+```
+
+Notes:
+
+- The CI/CD pipeline uses a GitHub action r[asa-action-server-gha](https://github.com/RasaHQ/rasa-action-server-gha) with a default `Dockerfile`.
+- The command `make docker-build` is provided for local development purposes only. It uses the `Dockerfile` of the repository and has debug turned on. 
+
+##### job: rasa_model
+
+```bash
+# Train the model
+make rasa-train
+
+# Start duckling server & Test the model
+docker run -p 8000:8000 rasa/duckling
+make rasa-test
+
+# Upload the model to S3
+make aws-s3-copy-rasa-model
+```
+
+Notes:
+
+- The CI/CD pipeline uses a GitHub action [rasa-train-test-gha](https://github.com/RasaHQ/rasa-train-test-gha).
+- The commands `make rasa-train` & `make rasa-test` are provided for local development purposes only. 
+
+##### 
+
