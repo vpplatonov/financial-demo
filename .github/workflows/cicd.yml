@@ -1,0 +1,357 @@
+
+name: cicd financial-demo
+on:
+  push:
+    paths:
+    - 'data/**'
+    - 'config.yml'
+    - 'domain.yml'
+    - 'actions/**'
+    - '.github/trigger.txt'
+
+env:
+  AWS_REGION: us-west-2
+  AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
+  
+jobs:
+  params:
+    name: params
+    runs-on: ubuntu-latest
+    # Map step outputs to job outputs, for use by downstream jobs
+    outputs:
+      rasa_version: ${{ steps.versions.outputs.rasa_version }}
+      rasa_sdk_version: ${{ steps.versions.outputs.rasa_sdk_version }}
+      
+      do_action_server: ${{ steps.action_server.outputs.do_action_server }}
+      docker_registry: ${{ steps.action_server.outputs.docker_registry }}
+      docker_user: ${{ steps.action_server.outputs.docker_user }}
+      docker_image: ${{ steps.action_server.outputs.docker_image }}
+      docker_tag: ${{ steps.action_server.outputs.docker_tag }}
+      
+      do_training: ${{ steps.rasa_model.outputs.do_training }}
+      
+      aws_region: ${{ steps.aws.outputs.aws_region }}
+      aws_s3: ${{ steps.aws.outputs.aws_s3 }}
+      aws_stack_name: ${{ steps.aws.outputs.aws_stack_name }}
+      aws_stack_type: ${{ steps.aws.outputs.aws_stack_type }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+          
+      - name: files
+        id: files
+        uses: jitterbit/get-changed-files@v1
+
+      - name: versions
+        id: versions
+        run: |
+          rasa_version=$( cat requirements.txt | grep 'rasa\[spacy\]' | cut -d'=' -f 3 )
+          rasa_sdk_version=$( cat requirements.txt | grep 'rasa-sdk' | cut -d'=' -f 3 )
+          
+          echo "::set-output name=rasa_version::$rasa_version"
+          echo "::set-output name=rasa_sdk_version::$rasa_sdk_version"
+        
+      - name: action_server
+        id: action_server
+        run: |
+          if [[ "${{ steps.files.outputs.all }}" == *"actions/"* ]]
+          then
+            echo "::set-output name=do_action_server::true"
+          else
+            echo "::set-output name=do_action_server::false"
+          fi
+          
+          if [[ github.ref == 'refs/heads/master' ]] || \
+             [[ github.head_ref == 'refs/heads/master' ]] 
+          then
+            echo "::set-output name=docker_registry::docker.io"
+            echo "::set-output name=docker_user::oakela"
+            echo "::set-output name=docker_image::rasa/financial-demo"
+            echo "::set-output name=docker_tag::latest"            
+          else
+            echo "::set-output name=docker_registry::${{ env.AWS_ECR_URI }}"
+            echo "::set-output name=docker_user::AWS"
+            echo "::set-output name=docker_image::financial-demo"
+            # branch name
+            echo "::set-output name=docker_tag::${GITHUB_REF##*/}"
+          fi
+          
+      - name: rasa_model
+        id: rasa_model
+        run: |
+          if [[ "${{ steps.files.outputs.all }}" == *"data/"* ]] || \
+             [[ "${{ steps.files.outputs.all }}" == *"config.yml"* ]] || \
+             [[ "${{ steps.files.outputs.all }}" == *"domain.yml"* ]]
+          then
+            echo "::set-output name=do_training::true"
+          else
+            echo "::set-output name=do_training::false"
+          fi
+      
+      - name: aws
+        id: aws
+        run: |
+          echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
+          echo "::set-output name=aws_s3::financial-demo"
+          echo "::set-output name=aws_stack_name::financial-demo-${GITHUB_ACTOR}-${GITHUB_REF##*/}"
+          echo "::set-output name=aws_stack_type::test"
+        
+  params_summary:
+    name: params_summary
+    runs-on: ubuntu-latest
+    needs: [params]
+    steps:
+    - name: params_summary
+      run: |
+        echo rasa_version : ${{ needs.params.outputs.rasa_version }}
+        echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
+        echo do_action_server: ${{ needs.params.outputs.do_action_server }}
+        echo docker_registry : ${{ needs.params.outputs.docker_registry }}
+        echo docker_user : ${{ needs.params.outputs.docker_user }}
+        echo docker_image : ${{ needs.params.outputs.docker_image }}
+        echo docker_tag: ${{ needs.params.outputs.docker_tag }}
+        echo do_training: ${{ needs.params.outputs.do_training }}
+        echo aws_region: ${{ needs.params.outputs.aws_region }}
+        echo aws_s3: ${{ needs.params.outputs.aws_s3 }}
+        echo aws_stack_name: ${{ needs.params.outputs.aws_stack_name }}
+        echo aws_stack_type: ${{ needs.params.outputs.aws_stack_type }}
+#
+#    - name: Dump GitHub context
+#      env:
+#        GITHUB_CONTEXT: ${{ toJSON(github) }}
+#      run: |
+#        echo "$GITHUB_CONTEXT"
+#        exit 1
+    
+  
+  action_server:
+    name: action_server
+    runs-on: ubuntu-latest
+    needs: [params, params_summary]
+    if: needs.params.outputs.do_action_server  == 'true'
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        
+#      - name: Set up Python 3.7
+#        uses: actions/setup-python@v2
+#        with:
+#          python-version: 3.7
+#          
+#      - name: Cache pip
+#        # see: https://docs.github.com/en/actions/guides/building-and-testing-python#caching-dependencies
+#        uses: actions/cache@v2
+#        with:
+#          path: ~/.cache/pip
+#          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-dev.txt') }}
+#          restore-keys: |
+#            ${{ runner.os }}-pip-
+#            ${{ runner.os }}-
+#            
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install -U pip
+#          pip install -r requirements-dev.txt
+#          
+#      - name: Python Code Formatting Tests
+#        working-directory: ${{ github.workspace }}
+#        run: |
+#          make lint
+#          
+#      - name: Python Type Checking
+#        working-directory: ${{ github.workspace }}
+#        run: |
+#          make types
+#          
+#      - name: Python Unit Tests
+#        working-directory: ${{ github.workspace }}
+#        run: |
+#          make test
+
+      - id: action_server
+        name: Build docker image
+        uses: RasaHQ/rasa-action-server-gha@main
+        with:
+          rasa_sdk_version: ${{ needs.params.outputs.rasa_sdk_version }}
+          actions_directory: 'actions'
+          requirements_file: 'actions/requirements-actions.txt'
+          docker_registry: ${{ needs.params.outputs.docker_registry }}
+          docker_image_name: ${{ needs.params.outputs.docker_image }}
+          docker_image_tag: ${{ needs.params.outputs.docker_tag }}
+          docker_registry_push: false
+          
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Push docker image to AWS ECR
+        run: |
+          # Retrieve an authentication token and authenticate Docker client to the registry.
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.AWS_ECR_URI }}
+          
+          make docker-push \
+            ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
+          
+      - name: Push latest docker image to docker.io/rasa
+        if: |
+          github.ref == 'refs/heads/master' || github.head_ref == 'refs/heads/master'
+        run: |
+          echo "TODO - CHECK IT"
+          exit 1
+          make docker-login \
+            DOCKER_REGISTRY=${{ needs.params.outputs.docker_registry }} \
+            DOCKER_USER=${{ needs.params.outputs.docker_user }} \
+            DOCKER_PW=${{ secrets.DOCKERHUB_PASSWORD }}
+          
+          make docker-push \
+            ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
+
+  rasa_model:
+    name: rasa_model
+    runs-on: ubuntu-latest
+    needs: [params, params_summary]
+    if: needs.params.outputs.do_training  == 'true'
+    services:
+       # Label used to access the service container
+       duckling:
+         image: rasa/duckling
+         ports:
+         # Maps port 8000 on service container to port 8000 on host VM
+         - 8000:8000
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      
+      - name: Rasa Train and Test GitHub Action
+        uses: RasaHQ/rasa-train-test-gha@main
+        with:
+          rasa_version: '2.4.0-spacy-en'
+          test_type: all
+          data_validate: true
+          cross_validation: true
+          publish_summary: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+ 
+      - name: Upload rasa model to github artifact storage
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@main
+        with:
+          name: model
+          path: models
+          
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ needs.params.outputs.aws_region }}
+          
+      - name: Create s3
+        run: |
+          echo "TO BE IMPLEMENTED"
+          exit 1
+          
+      - name: Upload rasa model to s3
+        run: |
+          echo "TO BE IMPLEMENTED"
+          exit 1
+
+  aws-infra:
+    name:  aws-infra
+    runs-on: ubuntu-latest
+    needs: [params, action_server, rasa_model]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ needs.params.outputs.aws_region }}
+      
+      - name: aws-deploy-stack
+        run: |
+          make aws-deploy-stack \
+            STACK_NAME=${{ needs.params.outputs.aws_stack_name }} \
+            STACK_TYPE=${{ needs.params.outputs.aws_stack_type }}
+  
+  aws-rasa-x:
+    name: aws-rasa-x
+    runs-on: ubuntu-latest
+    needs: [params, aws-infra]
+    steps:          
+      - run: echo "TO BE IMPLEMENTED"
+      
+  aws-deploy-action-server:
+    name: aws-deploy-action-server
+    runs-on: ubuntu-latest
+    needs: [params, aws-rasa-x]
+    steps:          
+      - run: echo "TO BE IMPLEMENTED"
+      
+  aws-deploy-model:
+    name: aws-deploy-model
+    runs-on: ubuntu-latest
+    needs: [params, aws-deploy-action-server]
+    steps:          
+      - run: echo "TO BE IMPLEMENTED"
+      
+  aws-smoketest:
+    name: aws-smoketest
+    runs-on: ubuntu-latest
+    needs: [params, aws-deploy-model]
+    steps:          
+      - run: echo "TO BE IMPLEMENTED"
+      
+  aws-cleanup:
+    name: aws-cleanup
+    runs-on: ubuntu-latest
+    needs: [params, aws-smoketest]
+    steps:          
+      - run: echo "TO BE IMPLEMENTED"
+      
+  gcp-prod-upgrade:
+    name: gcp-prod-upgrade
+    runs-on: ubuntu-latest
+    needs: [params, aws-smoketest]
+    steps:
+      - name: set_upgrade_prod
+        if: |
+            !(github.ref == 'refs/heads/master' 
+            || github.head_ref == 'refs/heads/master')
+        run: echo "UPGRADE_PROD=true" >> $GITHUB_ENV
+      
+      - name: Upgrade prod
+        if: env.UPGRADE_PROD == 'true'
+        run: echo "TO BE IMPLEMENTED"
+      
+      - name: Upgrade prod more
+        run: echo "TO BE IMPLEMENTED MORE"
+      
+  gcp-prod-smoketest:
+    name: gcp-prod-smoketest
+    runs-on: ubuntu-latest
+    needs: [params, gcp-prod-upgrade]
+    steps:
+      - name: Smoketest prod
+        if: env.UPGRADE_PROD == 'true'
+        run: echo "TO BE IMPLEMENTED"
+      
+      - name: Smoketest prod more
+        run: echo "TO BE IMPLEMENTED MORE"
+ 
+# TODO:
+# (-) reset config.yml epochs for DIET & TED
+# (-) Cleanup of infrastructure if an aws-sit steps fail
+#      https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#needs-context
+# (-) Delete docker image after successfull
+# (-) Send a slack message once gcp-prod has been upgraded
+# (-) Roll-back gcp-prod (= redeploy the backup) if gcp-prod-smoketest failed
+# (-) Use aws-sagemaker-gpu container to train the rasa model
+# (-) Makefile & Dockerfile to extract rasa_sdk version from requirements.txt

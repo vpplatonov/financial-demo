@@ -3,6 +3,11 @@ ACTION_SERVER_DOCKERNAME ?= financial-demo
 ACTION_SERVER_PORT ?= 5056
 ACTION_SERVER_ENDPOINT_HEALTH ?= health
 
+# The CICD pipeline sets these as environment variables 
+# Set some defaults for when you're running locally
+STACK_NAME ?= findemo-$(USER)-test
+STACK_TYPE ?= $(USER)-test
+
 help:
 	@echo "make"
 	@echo "	clean"
@@ -18,17 +23,25 @@ help:
 	@echo "	docker-build"
 	@echo "		Builds docker image of the action server"
 	@echo "	docker-run"
-	@echo "		Runs the docker image of the action server created by `docker-build`"
+	@echo "		Runs the docker image of the action server"
+	@echo "	docker-stops"
+	@echo "		Stops the running docker container of the action server"
 	@echo "	docker-test"
 	@echo "		Tests the health endpoint of the action server"
-	@echo "	docker-clean-containers"
-	@echo "		Stops & removes the containers created by `docker-run`"
-	@echo "	docker-clean-images"
-	@echo "		Removes the images created by `docker-build`"
+	@echo "	docker-clean-container"
+	@echo "		Stops & removes the container of the action server"
+	@echo "	docker-clean-image"
+	@echo "		Removes the docker image of the action server"
 	@echo "	docker-clean"
-	@echo "		Runs `docker-clean-containers` and `docker-clean-images`"
+	@echo "		Runs `docker-clean-container` and `docker-clean-image`"
+	@echo "	docker-login"
+	@echo "		Logs docker into container registry with DOCKER_USER & DOCKER_PW"
 	@echo "	docker-push"
-	@echo "		Pushes docker images to dockerhub"
+	@echo "		Pushes docker images to the logged in container registry"
+	@echo "	aws-deploy-stack"
+	@echo "		Deploys/updates the aws stack using a CloudFormation template."
+	@echo "	aws-delete-stack"
+	@echo "		Deletes an aws stack using a CloudFormation template."
 
 clean:
 	find . -name '*.pyc' -exec rm -f {} +
@@ -60,15 +73,39 @@ docker-run:
 	
 docker-test:
 	curl http://localhost:$(ACTION_SERVER_PORT)/$(ACTION_SERVER_ENDPOINT_HEALTH)
+	@echo $(NEWLINE)
 
-docker-clean-containers:
+docker-stop:
+	docker stop $(ACTION_SERVER_DOCKERNAME)
+	
+docker-clean-container:
 	docker stop $(ACTION_SERVER_DOCKERNAME)
 	docker rm $(ACTION_SERVER_DOCKERNAME)
 	
-docker-clean-images:
+docker-clean-image:
 	docker rmi $(ACTION_SERVER_DOCKERPATH)
 
-docker-clean: docker-clean-containers docker-clean-images
+docker-clean: docker-clean-container docker-clean-image
 	
+docker-login:
+	@echo docker registry: $(DOCKER_REGISTRY)
+	@echo docker user: $(DOCKER_USER)
+	@echo $(DOCKER_PW) | docker login $(DOCKER_REGISTRY) -u $(DOCKER_USER) --password-stdin
+
 docker-push:
+	@echo pushing image: $(ACTION_SERVER_DOCKERPATH)
 	docker image push $(ACTION_SERVER_DOCKERPATH)
+	
+aws-deploy-stack:
+	@echo deploying the AWS CloudFormation Stack with name: $(STACK_NAME)
+	@echo $(NEWLINE)
+	aws cloudformation deploy \
+		--template-file aws/cloudformation/aws-deploy-stack.yml \
+		--tags findemo_stack_type=$(STACK_TYPE) \
+		--stack-name $(STACK_NAME) \
+		--parameter-overrides StackName=$(STACK_NAME)
+		
+aws-delete-stack:
+	@echo deleting the AWS CloudFormation Stack with name: $(STACK_NAME)
+	@echo $(NEWLINE)
+	aws cloudformation delete-stack --stack-name $(STACK_NAME)
