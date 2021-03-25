@@ -1,5 +1,6 @@
 
-name: cicd financial-demo
+name: financial-demo cicd
+
 on:
   push:
     paths:
@@ -14,8 +15,8 @@ env:
   AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
   AWS_ECR_REPOSITORY: financial-demo
   AWS_S3_NAME: rasa-financial-demo
+  # TODO: remove once on-the-fly eks cluster creation is implemented
   AWS_EKS_CREATE: 'false'
-  AWS_EKS_DELETE_NAMESPACE_TEST: 'true'
   
 jobs:
   params:
@@ -111,9 +112,9 @@ jobs:
         id: aws
         run: |
           echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
-          echo "::set-output name=aws_s3::financial-demo"
+          echo "::set-output name=aws_s3::${{ env.AWS_S3_NAME }}"
           echo "::set-output name=aws_eks_create::${{ env.AWS_EKS_CREATE }}"
-          echo "::set-output name=aws_eks_namespace_test::${GITHUB_ACTOR}-${GITHUB_REF##*/}"
+          echo "::set-output name=aws_eks_namespace_test::test"
           echo "::set-output name=aws_eks_namespace_prod::prod"
         
   params_summary:
@@ -125,12 +126,17 @@ jobs:
       run: |
         echo rasa_version : ${{ needs.params.outputs.rasa_version }}
         echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
+        
         echo do_action_server: ${{ needs.params.outputs.do_action_server }}
         echo docker_registry : ${{ needs.params.outputs.docker_registry }}
         echo docker_user : ${{ needs.params.outputs.docker_user }}
         echo docker_image : ${{ needs.params.outputs.docker_image }}
         echo docker_tag: ${{ needs.params.outputs.docker_tag }}
+        
         echo do_training: ${{ needs.params.outputs.do_training }}
+        echo rasa_model_name: ${{ needs.params.outputs.rasa_model_name }}
+        echo rasa_model_path: ${{ needs.params.outputs.rasa_model_path }}
+        
         echo aws_region: ${{ needs.params.outputs.aws_region }}
         echo aws_s3: ${{ needs.params.outputs.aws_s3 }}
         echo aws_eks_create: ${{ needs.params.outputs.aws_eks_create }}
@@ -279,8 +285,8 @@ jobs:
           make aws-s3-copy-rasa-model \
             RASA_MODEL_PATH=${{ needs.params.outputs.rasa_model_path }}
 
-  aws-eks-create:
-    name:  aws-eks-create
+  aws-eks-create-test-cluster:
+    name:  aws-eks-create-test-cluster
     runs-on: ubuntu-latest
     needs: [params, action_server, rasa_model]
     # TODO: REMOVE THIS LINE -- FOR DEVELOPMENT PURPOSES, ALWAYS RUN THIS...
