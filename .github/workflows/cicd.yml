@@ -162,7 +162,7 @@ jobs:
         echo aws_region: ${{ needs.params.outputs.aws_region }}
         echo aws_s3: ${{ needs.params.outputs.aws_s3 }}
         
-        echo do_create_cluster: ${{ needs.params.outputs.aws_eks_create }}
+        echo do_create_cluster: ${{ needs.params.outputs.do_create_cluster }}
         
         echo deploy_namespace: ${{ needs.params.outputs.deploy_namespace }}
         echo deploy_release_name: ${{ needs.params.outputs.deploy_release_name }}
@@ -332,8 +332,8 @@ jobs:
         run: |
             make aws-eks-cluster-create
           
-  deploy-TEST:
-    name: deploy
+  deploy_TEST:
+    name: deploy_TEST
     runs-on: ubuntu-latest
     needs: [params, aws_eks_create_cluster, rasa_model, action_server]
     # TODO: REMOVE THIS LINE -- FOR DEVELOPMENT PURPOSES, ALWAYS RUN THIS...
@@ -376,10 +376,10 @@ jobs:
           exit 1
           
       
-  deploy-PROD:
-    name: deploy-PRO
+  deploy_PROD:
+    name: deploy_PROD
     runs-on: ubuntu-latest
-    needs: [params, deploy-TEST]
+    needs: [params, deploy_TEST]
     steps:          
       - run: |
           echo "TO BE IMPLEMENTED"
