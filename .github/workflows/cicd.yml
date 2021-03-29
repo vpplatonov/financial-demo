@@ -11,7 +11,8 @@ on:
     - '.github/trigger.txt'
 
 env:
-  # TODO: use Makefile to set these values
+  # Keep in sync with Makefile
+  # TODO: check if we can avoid duplicate settings
   AWS_REGION: us-west-2
   AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
   AWS_ECR_REPOSITORY: financial-demo
@@ -128,8 +129,8 @@ jobs:
       - name: deploy
         id: deploy
         run: |
-          echo "::set-output name=deploy_namespace::my-namespace}"
-          echo "::set-output name=deploy_release_name::my-release}"
+          echo "::set-output name=deploy_namespace::my-namespace"
+          echo "::set-output name=deploy_release_name::my-release"
 
 
         
@@ -144,6 +145,7 @@ jobs:
         echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
         
         echo do_action_server: ${{ needs.params.outputs.do_action_server }}
+        echo docker_registry: ${{ env.AWS_ECR_URI }}
         echo docker_user : ${{ needs.params.outputs.docker_user }}
         echo docker_image : ${{ needs.params.outputs.docker_image }}
         echo docker_tag: ${{ needs.params.outputs.docker_tag }}
