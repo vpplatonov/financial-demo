@@ -337,6 +337,13 @@ jobs:
           make install-eksctl
           make install-kubectl
           make install-helm
+      
+      - name: Configure kubectl
+        run: |
+          make aws-eks-cluster-update-kubeconfig
+          
+          # check that it works
+          make aws-eks-cluster-describe
           
       - name: Rasa X QuickInstall
         run: |
