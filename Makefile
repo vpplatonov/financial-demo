@@ -73,12 +73,12 @@ install-eksctl:
 install-kubectl:
 	sudo snap install kubectl --classic
 	@echo $(NEWLINE)
-	kubectl version
+	kubectl version --client --short
 
 install-helm:
 	sudo snap install helm --classic
 	@echo $(NEWLINE)
-	helm version
+	helm version --short
 	
 rasa-train:
 	@echo Training $(RASA_MODEL_NAME)
