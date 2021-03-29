@@ -53,6 +53,13 @@ jobs:
       - name: files
         id: files
         uses: jitterbit/get-changed-files@v1
+        
+      - name: Configure AWS Credentials
+            uses: aws-actions/configure-aws-credentials@v1
+            with:
+              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+              aws-region: ${{ env.AWS_REGION }}
 
       - name: versions
         id: versions
@@ -116,13 +123,6 @@ jobs:
         run: |
           echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
           echo "::set-output name=aws_s3::${{ env.AWS_S3_BUCKET_NAME }}"
-          
-          - name: Configure AWS Credentials
-            uses: aws-actions/configure-aws-credentials@v1
-            with:
-              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-              aws-region: ${{ env.AWS_REGION }}
               
           if [[ $(make aws-eks-cluster-exists) = True ]]
           then
