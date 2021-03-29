@@ -347,6 +347,8 @@ jobs:
           
       - name: Rasa X QuickInstall
         run: |
+          echo "TO BE IMPLEMENTED"
+          exit 1
           make rasa-x-deploy
           
       - name: Create pull secret
