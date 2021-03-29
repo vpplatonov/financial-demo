@@ -372,7 +372,7 @@ aws-eks-cluster-update-kubeconfig:
 		--name $(AWS_EKS_CLUSTER_NAME)	
 
 rasa-x-deploy:
-	curl -s get-rasa-x.rasa.com | sudo bash
+	cat deploy/get-rasa-x | sudo bash
 
 rasa-x-get-pods:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
