@@ -131,11 +131,11 @@ jobs:
             echo "::set-output name=do_create_cluster::true"
           fi
 
-        - name: deploy
-          id: deploy
-          run: |
-            echo "::set-output name=deploy_namespace::my-namespace}"
-            echo "::set-output name=deploy_release_name::my-release}"
+      - name: deploy
+        id: deploy
+        run: |
+          echo "::set-output name=deploy_namespace::my-namespace}"
+          echo "::set-output name=deploy_release_name::my-release}"
 
 
         
