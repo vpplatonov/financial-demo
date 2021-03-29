@@ -22,6 +22,9 @@ AWS_EKS_KEYPAIR_NAME := findemo
 AWS_EKS_CLUSTER_NAME := financial-demo-$(shell git branch --show-current)
 AWS_EKS_KUBERNETES_VERSION := 1.19
 
+AWS_EKS_NAMESPACE := rasa
+AWS_EKS_RELEASE_NAME := rasa
+
 help:
 	@echo "make"
 	@echo "	clean"
@@ -73,7 +76,7 @@ install-eksctl:
 install-kubectl:
 	sudo snap install kubectl --classic
 	@echo $(NEWLINE)
-	kubectl version --client --short
+	sudo kubectl version --client --short
 
 install-helm:
 	sudo snap install helm --classic
@@ -367,3 +370,25 @@ aws-eks-cluster-update-kubeconfig:
 	aws eks update-kubeconfig \
 		--region $(AWS_REGION) \
 		--name $(AWS_EKS_CLUSTER_NAME)	
+
+rasa-x-deploy:
+	curl -s get-rasa-x.rasa.com | sudo bash
+
+rasa-x-get-pods:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		get pods
+	
+rasa-x-get-secrets-postgresql:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		get secret $(AWS_EKS_RELEASE_NAME)-postgresql -o yaml | \
+		awk -F ': ' '/password/{print $2}' | base64 -d
+		
+rasa-x-get-secrets-redis:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		get secret $(AWS_EKS_RELEASE_NAME)-redis -o yaml | \
+		awk -F ': ' '/password/{print $2}' | base64 -d
+		
+rasa-x-get-secrets-rabbit:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		get secret $(AWS_EKS_RELEASE_NAME)-rabbit -o yaml | \
+		awk -F ': ' '/password/{print $2}' | base64 -d

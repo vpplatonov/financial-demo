@@ -42,9 +42,6 @@ jobs:
       
       do_create_cluster: ${{ steps.aws.outputs.do_create_cluster }}
       aws_eks_create: ${{ steps.aws.outputs.aws_eks_create }}
-      
-      deploy_namespace: ${{ steps.deploy.outputs.deploy_namespace }}
-      deploy_release_name: ${{ steps.deploy.outputs.deploy_release_name }}
 
     steps:
       - name: checkout
@@ -126,13 +123,6 @@ jobs:
             echo "::set-output name=do_create_cluster::true"
           fi
 
-      - name: deploy
-        id: deploy
-        run: |
-          echo "::set-output name=deploy_namespace::my-namespace"
-          echo "::set-output name=deploy_release_name::my-release"
-
-
         
   params_summary:
     name: params_summary
@@ -158,9 +148,6 @@ jobs:
         echo aws_s3: ${{ needs.params.outputs.aws_s3 }}
         
         echo do_create_cluster: ${{ needs.params.outputs.do_create_cluster }}
-        
-        echo deploy_namespace: ${{ needs.params.outputs.deploy_namespace }}
-        echo deploy_release_name: ${{ needs.params.outputs.deploy_release_name }}
 #
 #    - name: Dump GitHub context
 #      env:
@@ -323,7 +310,6 @@ jobs:
           make install-eksctl
           make install-kubectl
           make install-helm
-          exit
           
       - name: cluster
         run: |
@@ -334,7 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [params, aws_eks_create_cluster, rasa_model, action_server]
     # TODO: REMOVE THIS LINE -- FOR DEVELOPMENT PURPOSES, ALWAYS RUN THIS...
-    if: always()
+    # if: always()
     steps: 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -349,10 +335,9 @@ jobs:
           make install-kubectl
           make install-helm
           
-      - name: Create namespace
+      - name: Rasa X QuickInstall
         run: |
-          echo "TO BE IMPLEMENTED"
-          exit 1
+          make rasa-x-deploy
           
       - name: Create pull secret
         run: |
