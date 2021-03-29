@@ -16,8 +16,9 @@ AWS_S3_BUCKET_NAME := rasa-financial-demo
 
 AWS_IAM_ROLE_NAME := eksClusterRole
 
-AWS_EKS_VPC_STACK_NAME := eks-vpc-financial-demo-$(shell git branch --show-current)
+#AWS_EKS_VPC_STACK_NAME := eks-vpc-financial-demo-$(shell git branch --show-current)
 AWS_EKS_VPC_TEMPLATE := aws/cloudformation/amazon-eks-vpc-private-subnets.yaml
+AWS_EKS_KEYPAIR_NAME := findemo
 AWS_EKS_CLUSTER_NAME := financial-demo-$(shell git branch --show-current)
 AWS_EKS_KUBERNETES_VERSION := 1.19
 
@@ -61,6 +62,24 @@ clean:
 	rm -rf dist/
 	rm -rf docs/_build
 
+install-eksctl:
+	curl --silent --location "https://github.com/weaveworks/eksctl/releases/download/0.43.0-rc.0/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
+	sudo mv /tmp/eksctl /usr/local/bin
+	@echo $(NEWLINE)
+	eksctl version
+	@echo $(NEWLINE)
+	@echo Note: we require 0.43.0-rc.0 or higher
+	
+install-kubectl:
+	sudo snap install kubectl --classic
+	@echo $(NEWLINE)
+	kubectl version
+
+install-helm:
+	sudo snap install helm --classic
+	@echo $(NEWLINE)
+	helm version
+	
 rasa-train:
 	@echo Training $(RASA_MODEL_NAME)
 	rasa train --fixed-model-name $(RASA_MODEL_NAME)
@@ -157,90 +176,166 @@ aws-s3-copy-rasa-model:
 	@echo copying $(RASA_MODEL_PATH) to s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
 	aws s3 cp $(RASA_MODEL_PATH) s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
 
-aws-cloudformation-eks-vpc-stack-exists:
-	@aws cloudformation describe-stacks \
-		--no-paginate \
-		--output text \
-		--region $(AWS_REGION) \
-		--query "contains(Stacks[*].StackName, '$(AWS_EKS_VPC_STACK_NAME)')"	
+#aws-cloudformation-eks-vpc-stack-exists:
+#	@aws cloudformation describe-stacks \
+#		--no-paginate \
+#		--output text \
+#		--region $(AWS_REGION) \
+#		--query "contains(Stacks[*].StackName, '$(AWS_EKS_VPC_STACK_NAME)')"	
 		
-aws-cloudformation-eks-vpc-stack-deploy:
-	@aws cloudformation deploy \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-		--template-file $(AWS_EKS_VPC_TEMPLATE)
+#aws-cloudformation-eks-vpc-stack-deploy:
+#	@aws cloudformation deploy \
+#		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
+#		--template-file $(AWS_EKS_VPC_TEMPLATE)
 
-aws-cloudformation-eks-vpc-stack-status:	
+#aws-cloudformation-eks-vpc-stack-status:	
+#	@aws cloudformation describe-stacks \
+#		--no-paginate \
+#		--output text \
+#		--region $(AWS_REGION) \
+#		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
+#		--query "Stacks[].StackStatus"
+		
+aws-cloudformation-eks-get-SubnetsPrivate:	
 	@aws cloudformation describe-stacks \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-		--query "Stacks[].StackStatus"
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='SubnetsPrivate'].OutputValue"
+		
+aws-cloudformation-eks-get-SubnetsPublic:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='SubnetsPublic'].OutputValue"
+		
+aws-cloudformation-eks-get-ServiceRoleARN:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='ServiceRoleARN'].OutputValue"
+		
+aws-cloudformation-eks-get-Endpoint:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='Endpoint'].OutputValue"
+		
+aws-cloudformation-eks-get-SharedNodeSecurityGroup:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='SharedNodeSecurityGroup'].OutputValue"
 
-aws-cloudformation-eks-vpc-get-SecurityGroups:	
+aws-cloudformation-eks-get-VPC:	
 	@aws cloudformation describe-stacks \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-		--query "Stacks[].Outputs[?OutputKey=='SecurityGroups'].OutputValue"
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='VPC'].OutputValue"
 
-aws-cloudformation-eks-vpc-get-VpcId:	
+aws-cloudformation-eks-get-ClusterSecurityGroupId:	
 	@aws cloudformation describe-stacks \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-		--query "Stacks[].Outputs[?OutputKey=='VpcId'].OutputValue"
-		
-aws-cloudformation-eks-vpc-get-SubnetIds:	
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='ClusterSecurityGroupId'].OutputValue"
+
+aws-cloudformation-eks-get-CertificateAuthorityData:	
 	@aws cloudformation describe-stacks \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-		--query "Stacks[].Outputs[?OutputKey=='SubnetIds'].OutputValue"
-		
-aws-cloudformation-eks-vpc-stack-delete:
-	@aws cloudformation delete-stack \
-		--stack-name $(AWS_EKS_VPC_STACK_NAME)
-		
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='CertificateAuthorityData'].OutputValue"
+
+aws-cloudformation-eks-get-SecurityGroup:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='SecurityGroup'].OutputValue"
+
+aws-cloudformation-eks-get-ARN:	
+	@aws cloudformation describe-stacks \
+		--no-paginate \
+		--output text \
+		--region $(AWS_REGION) \
+		--stack-name eksctl-$(AWS_EKS_CLUSTER_NAME)-cluster \
+		--query "Stacks[].Outputs[?OutputKey=='ARN'].OutputValue"
+	
+aws-eks-cluster-create:		
+	eksctl create cluster \
+		--name $(AWS_EKS_CLUSTER_NAME) \
+		--region $(AWS_REGION) \
+		--version $(AWS_EKS_KUBERNETES_VERSION) \
+		--with-oidc \
+		--ssh-access \
+		--ssh-public-key $(AWS_EKS_KEYPAIR_NAME) \
+		--managed
+
+aws-eks-cluster-info:
+	kubectl cluster-info
+	
+# https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
+aws-eks-cluster-delete:
+	eksctl delete cluster \
+		--name $(AWS_EKS_CLUSTER_NAME) \
+		--region $(AWS_REGION) 
+
 aws-eks-cluster-exists:
 	@aws eks list-clusters \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
 		--query "contains(clusters[*], '$(AWS_EKS_CLUSTER_NAME)')"	
-		
-aws-eks-cluster-create:
-	@$(eval AWS_EKS_CLUSTER_ROLE_ARN := $(shell make aws-iam-role-get-Arn))
-	@$(eval AWS_EKS_SECURITY_GROUP_IDS := $(shell make aws-cloudformation-eks-vpc-get-SecurityGroups))
-	@$(eval AWS_EKS_SUBNET_IDS=$(shell make aws-cloudformation-eks-vpc-get-SubnetIds))
-	@echo Creating an AWS EKS cluster with:
-	@echo - AWS_EKS_CLUSTER_NAME              : $(AWS_EKS_CLUSTER_NAME)
-	@echo - AWS_EKS_CLUSTER_ROLE_ARN      : $(AWS_EKS_CLUSTER_ROLE_ARN)
-	@echo - AWS_EKS_SECURITY_GROUP_IDS: $(AWS_EKS_SECURITY_GROUP_IDS)
-	@echo - AWS_EKS_SUBNET_IDS        : $(AWS_EKS_SUBNET_IDS)
-	@echo $(NEWLINE)
-	aws eks create-cluster \
-		--no-paginate \
-		--output text \
-		--region $(AWS_REGION) \
-		--name $(AWS_EKS_CLUSTER_NAME) \
-		--kubernetes-version $(AWS_EKS_KUBERNETES_VERSION) \
-		--role-arn $(AWS_EKS_CLUSTER_ROLE_ARN) \
-		--resources-vpc-config subnetIds=$(AWS_EKS_SUBNET_IDS),securityGroupIds=$(AWS_EKS_SECURITY_GROUP_IDS)		
+			
+#aws-eks-cluster-create-OLD:
+#	@$(eval AWS_EKS_CLUSTER_ROLE_ARN := $(shell make aws-iam-role-get-Arn))
+#	@$(eval AWS_EKS_SECURITY_GROUP_IDS := $(shell make aws-cloudformation-eks-vpc-get-SecurityGroups))
+#	@$(eval AWS_EKS_SUBNET_IDS=$(shell make aws-cloudformation-eks-vpc-get-SubnetIds))
+#	@echo Creating an AWS EKS cluster with:
+#	@echo - AWS_EKS_CLUSTER_NAME              : $(AWS_EKS_CLUSTER_NAME)
+#	@echo - AWS_EKS_CLUSTER_ROLE_ARN      : $(AWS_EKS_CLUSTER_ROLE_ARN)
+#	@echo - AWS_EKS_SECURITY_GROUP_IDS: $(AWS_EKS_SECURITY_GROUP_IDS)
+#	@echo - AWS_EKS_SUBNET_IDS        : $(AWS_EKS_SUBNET_IDS)
+#	@echo $(NEWLINE)
+#	aws eks create-cluster \
+#		--no-paginate \
+#		--output text \
+#		--region $(AWS_REGION) \
+#		--name $(AWS_EKS_CLUSTER_NAME) \
+#		--kubernetes-version $(AWS_EKS_KUBERNETES_VERSION) \
+#		--role-arn $(AWS_EKS_CLUSTER_ROLE_ARN) \
+#		--resources-vpc-config subnetIds=$(AWS_EKS_SUBNET_IDS),securityGroupIds=$(AWS_EKS_SECURITY_GROUP_IDS)		
 
-aws-eks-wait-cluster-active:	
-	@aws eks wait cluster-active \
-		--region $(AWS_REGION) \
-		--name $(AWS_EKS_CLUSTER_NAME)
+#aws-eks-wait-cluster-active:	
+#	@aws eks wait cluster-active \
+#		--region $(AWS_REGION) \
+#		--name $(AWS_EKS_CLUSTER_NAME)
 		
 aws-eks-cluster-describe:	
 	@aws eks describe-cluster \
 		--no-paginate \
 		--region $(AWS_REGION) \
 		--name $(AWS_EKS_CLUSTER_NAME) 
+		
+aws-eks-cluster-describe-stacks:	
+	@eksctl utils describe-stacks \
+		--region $(AWS_REGION) \
+		--cluster $(AWS_EKS_CLUSTER_NAME) 
 		
 aws-eks-cluster-status:	
 	@aws eks describe-cluster \
@@ -265,10 +360,6 @@ aws-eks-cluster-get-certificateAuthority:
 		--region $(AWS_REGION) \
 		--name $(AWS_EKS_CLUSTER_NAME) \
 		--query "cluster.certificateAuthority"
-
-# https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
-aws-eks-cluster-delete:
-	@echo TO-BE-IMPLEMENTED-SEE-DOCS	
 
 aws-eks-cluster-update-kubeconfig:
 	@echo Updating kubeconfig for AWS EKS cluster with name: $(AWS_EKS_CLUSTER_NAME)

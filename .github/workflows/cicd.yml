@@ -318,9 +318,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.params.outputs.aws_region }}
       
-      - name: vpc
+      - name: install CLIs
         run: |
-          make aws-cloudformation-eks-vpc-stack-deploy
+          make install-eksctl
+          make install-kubectl
+          make install-helm
+          exit
           
       - name: cluster
         run: |
