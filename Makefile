@@ -18,7 +18,7 @@ AWS_IAM_ROLE_NAME := eksClusterRole
 
 AWS_EKS_VPC_STACK_NAME := eks-vpc-financial-demo-$(shell git branch --show-current)
 AWS_EKS_VPC_TEMPLATE := aws/cloudformation/amazon-eks-vpc-private-subnets.yaml
-AWS_EKS_NAME := financial-demo-$(shell git branch --show-current)
+AWS_EKS_CLUSTER_NAME := financial-demo-$(shell git branch --show-current)
 AWS_EKS_KUBERNETES_VERSION := 1.19
 
 help:
@@ -210,14 +210,14 @@ aws-eks-cluster-exists:
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--query "contains(clusters[*], '$(AWS_EKS_NAME)')"	
+		--query "contains(clusters[*], '$(AWS_EKS_CLUSTER_NAME)')"	
 		
 aws-eks-cluster-create:
 	@$(eval AWS_EKS_CLUSTER_ROLE_ARN := $(shell make aws-iam-role-get-Arn))
 	@$(eval AWS_EKS_SECURITY_GROUP_IDS := $(shell make aws-cloudformation-eks-vpc-get-SecurityGroups))
 	@$(eval AWS_EKS_SUBNET_IDS=$(shell make aws-cloudformation-eks-vpc-get-SubnetIds))
 	@echo Creating an AWS EKS cluster with:
-	@echo - AWS_EKS_NAME              : $(AWS_EKS_NAME)
+	@echo - AWS_EKS_CLUSTER_NAME              : $(AWS_EKS_CLUSTER_NAME)
 	@echo - AWS_EKS_CLUSTER_ROLE_ARN      : $(AWS_EKS_CLUSTER_ROLE_ARN)
 	@echo - AWS_EKS_SECURITY_GROUP_IDS: $(AWS_EKS_SECURITY_GROUP_IDS)
 	@echo - AWS_EKS_SUBNET_IDS        : $(AWS_EKS_SUBNET_IDS)
@@ -226,7 +226,7 @@ aws-eks-cluster-create:
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME) \
+		--name $(AWS_EKS_CLUSTER_NAME) \
 		--kubernetes-version $(AWS_EKS_KUBERNETES_VERSION) \
 		--role-arn $(AWS_EKS_CLUSTER_ROLE_ARN) \
 		--resources-vpc-config subnetIds=$(AWS_EKS_SUBNET_IDS),securityGroupIds=$(AWS_EKS_SECURITY_GROUP_IDS)		
@@ -234,20 +234,20 @@ aws-eks-cluster-create:
 aws-eks-wait-cluster-active:	
 	@aws eks wait cluster-active \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME)
+		--name $(AWS_EKS_CLUSTER_NAME)
 		
 aws-eks-cluster-describe:	
 	@aws eks describe-cluster \
 		--no-paginate \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME) 
+		--name $(AWS_EKS_CLUSTER_NAME) 
 		
 aws-eks-cluster-status:	
 	@aws eks describe-cluster \
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME) \
+		--name $(AWS_EKS_CLUSTER_NAME) \
 		--query "cluster.status"	
 
 aws-eks-cluster-get-endpoint:
@@ -255,7 +255,7 @@ aws-eks-cluster-get-endpoint:
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME) \
+		--name $(AWS_EKS_CLUSTER_NAME) \
 		--query "cluster.endpoint"
 
 aws-eks-cluster-get-certificateAuthority:
@@ -263,7 +263,7 @@ aws-eks-cluster-get-certificateAuthority:
 		--no-paginate \
 		--output text \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME) \
+		--name $(AWS_EKS_CLUSTER_NAME) \
 		--query "cluster.certificateAuthority"
 
 # https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
@@ -271,8 +271,8 @@ aws-eks-cluster-delete:
 	@echo TO-BE-IMPLEMENTED-SEE-DOCS	
 
 aws-eks-cluster-update-kubeconfig:
-	@echo Updating kubeconfig for AWS EKS cluster with name: $(AWS_EKS_NAME)
+	@echo Updating kubeconfig for AWS EKS cluster with name: $(AWS_EKS_CLUSTER_NAME)
 	@echo $(NEWLINE)
 	aws eks update-kubeconfig \
 		--region $(AWS_REGION) \
-		--name $(AWS_EKS_NAME)	
+		--name $(AWS_EKS_CLUSTER_NAME)	
