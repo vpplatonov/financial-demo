@@ -115,7 +115,7 @@ jobs:
           echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
           echo "::set-output name=aws_s3::${{ env.AWS_S3_BUCKET_NAME }}"
           
-          if [[ make aws-eks-cluster-exists = True ]]
+          if [[ $(make aws-eks-cluster-exists) = True ]]
           then
             echo "::set-output name=do_create_cluster::false"
           else
