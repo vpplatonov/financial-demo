@@ -42,7 +42,9 @@ jobs:
       
       do_create_cluster: ${{ steps.aws.outputs.do_create_cluster }}
       aws_eks_create: ${{ steps.aws.outputs.aws_eks_create }}
-      aws_eks_namespace: ${{ steps.aws.outputs.aws_eks_namespace }}
+      
+      deploy_namespace: ${{ steps.deploy.outputs.deploy_namespace }}
+      deploy_release_name: ${{ steps.deploy.outputs.deploy_release_name }}
 
     steps:
       - name: checkout
@@ -115,13 +117,26 @@ jobs:
           echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
           echo "::set-output name=aws_s3::${{ env.AWS_S3_BUCKET_NAME }}"
           
+          - name: Configure AWS Credentials
+            uses: aws-actions/configure-aws-credentials@v1
+            with:
+              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+              aws-region: ${{ env.AWS_REGION }}
+              
           if [[ $(make aws-eks-cluster-exists) = True ]]
           then
             echo "::set-output name=do_create_cluster::false"
           else
             echo "::set-output name=do_create_cluster::true"
           fi
-          exit 1
+
+        - name: deploy
+          id: deploy
+          run: |
+            echo "::set-output name=deploy_namespace::my-namespace}"
+            echo "::set-output name=deploy_release_name::my-release}"
+
 
         
   params_summary:
@@ -146,9 +161,12 @@ jobs:
         
         echo aws_region: ${{ needs.params.outputs.aws_region }}
         echo aws_s3: ${{ needs.params.outputs.aws_s3 }}
-        echo aws_eks_create: ${{ needs.params.outputs.aws_eks_create }}
-        echo aws_eks_namespace_test: ${{ needs.params.outputs.aws_eks_namespace_test }}
-        echo aws_eks_namespace_prod: ${{ needs.params.outputs.aws_eks_namespace_prod }}
+        
+        echo do_create_cluster: ${{ needs.params.outputs.aws_eks_create }}
+        
+        echo deploy_namespace: ${{ needs.params.outputs.deploy_namespace }}
+        echo deploy_release_name: ${{ needs.params.outputs.deploy_release_name }}
+        exit 1
 #
 #    - name: Dump GitHub context
 #      env:
