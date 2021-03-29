@@ -27,7 +27,6 @@ jobs:
       rasa_sdk_version: ${{ steps.versions.outputs.rasa_sdk_version }}
       
       do_action_server: ${{ steps.action_server.outputs.do_action_server }}
-      docker_registry: ${{ steps.action_server.outputs.docker_registry }}
       docker_user: ${{ steps.action_server.outputs.docker_user }}
       docker_image: ${{ steps.action_server.outputs.docker_image }}
       docker_tag: ${{ steps.action_server.outputs.docker_tag }}
@@ -80,20 +79,15 @@ jobs:
             echo "::set-output name=do_action_server::false"
           fi
           
-          if [[ github.ref == 'refs/heads/main' ]] || \
-             [[ github.head_ref == 'refs/heads/main' ]] 
-          then
-            echo "::set-output name=docker_registry::docker.io"
-            echo "::set-output name=docker_user::oakela"
-            echo "::set-output name=docker_image::rasa/financial-demo"
-            echo "::set-output name=docker_tag::latest"            
-          else
-            echo "::set-output name=docker_registry::${{ env.AWS_ECR_URI }}"
-            echo "::set-output name=docker_user::AWS"
-            echo "::set-output name=docker_image::${{ env.AWS_ECR_REPOSITORY }}"
-            # branch name
-            echo "::set-output name=docker_tag::${GITHUB_REF##*/}"
-          fi
+          #          echo "::set-output name=docker_user::oakela"
+          #          echo "::set-output name=docker_image::rasa/financial-demo"
+          #          echo "::set-output name=docker_tag::latest"            
+
+          echo "::set-output name=docker_user::AWS"
+          echo "::set-output name=docker_image::${{ env.AWS_ECR_REPOSITORY }}"
+          # branch name
+          echo "::set-output name=docker_tag::${GITHUB_REF##*/}"
+
           
       - name: rasa_model
         id: rasa_model
@@ -150,7 +144,6 @@ jobs:
         echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
         
         echo do_action_server: ${{ needs.params.outputs.do_action_server }}
-        echo docker_registry : ${{ needs.params.outputs.docker_registry }}
         echo docker_user : ${{ needs.params.outputs.docker_user }}
         echo docker_image : ${{ needs.params.outputs.docker_image }}
         echo docker_tag: ${{ needs.params.outputs.docker_tag }}
@@ -166,7 +159,6 @@ jobs:
         
         echo deploy_namespace: ${{ needs.params.outputs.deploy_namespace }}
         echo deploy_release_name: ${{ needs.params.outputs.deploy_release_name }}
-        exit 1
 #
 #    - name: Dump GitHub context
 #      env:
@@ -227,7 +219,7 @@ jobs:
           rasa_sdk_version: ${{ needs.params.outputs.rasa_sdk_version }}
           actions_directory: 'actions'
           requirements_file: 'actions/requirements-actions.txt'
-          docker_registry: ${{ needs.params.outputs.docker_registry }}
+          docker_registry: ${{ env.AWS_ECR_URI }}
           docker_image_name: ${{ needs.params.outputs.docker_image }}
           docker_image_tag: ${{ needs.params.outputs.docker_tag }}
           docker_registry_push: false
@@ -253,7 +245,7 @@ jobs:
       #          echo "TODO - CHECK IT"
       #          exit 1
       #          make docker-login \
-      #            DOCKER_REGISTRY=${{ needs.params.outputs.docker_registry }} \
+      #            DOCKER_REGISTRY="docker.io" \
       #            DOCKER_USER=${{ needs.params.outputs.docker_user }} \
       #            DOCKER_PW=${{ secrets.DOCKERHUB_PASSWORD }}
       #          
