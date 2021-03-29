@@ -11,10 +11,11 @@ on:
     - '.github/trigger.txt'
 
 env:
+  # TODO: use Makefile to set these values
   AWS_REGION: us-west-2
   AWS_ECR_URI: 024629701212.dkr.ecr.us-west-2.amazonaws.com
   AWS_ECR_REPOSITORY: financial-demo
-  AWS_S3_NAME: rasa-financial-demo
+  AWS_S3_BUCKET_NAME: rasa-financial-demo
   # TODO: remove once on-the-fly eks cluster creation is implemented
   AWS_EKS_CREATE: 'false'
   
@@ -112,7 +113,7 @@ jobs:
         id: aws
         run: |
           echo "::set-output name=aws_region::${{ env.AWS_REGION }}"
-          echo "::set-output name=aws_s3::${{ env.AWS_S3_NAME }}"
+          echo "::set-output name=aws_s3::${{ env.AWS_S3_BUCKET_NAME }}"
           echo "::set-output name=aws_eks_create::${{ env.AWS_EKS_CREATE }}"
           echo "::set-output name=aws_eks_namespace_test::test"
           echo "::set-output name=aws_eks_namespace_prod::prod"
@@ -216,9 +217,7 @@ jobs:
           
       - name: Push docker image to AWS ECR
         run: |
-          make aws-docker-login \
-            AWS_REGION=${{ env.AWS_REGION }} \
-            AWS_ECR_URI=${{ env.AWS_ECR_URI }}
+          make aws-ecr-docker-login
           
           make docker-push \
             ACTION_SERVER_DOCKERPATH=${{ steps.action_server.outputs.docker_image_full_name }}
@@ -285,35 +284,41 @@ jobs:
           make aws-s3-copy-rasa-model \
             RASA_MODEL_PATH=${{ needs.params.outputs.rasa_model_path }}
 
-  aws-eks-create-test-cluster:
-    name:  aws-eks-create-test-cluster
+  aws_eks_create_cluster:
+    name:  aws_eks_create_cluster
     runs-on: ubuntu-latest
-    needs: [params, action_server, rasa_model]
-    # TODO: REMOVE THIS LINE -- FOR DEVELOPMENT PURPOSES, ALWAYS RUN THIS...
-    if: always()
+    needs: [params]
     steps:
       - name: checkout
         uses: actions/checkout@v2
       
       - name: Configure AWS Credentials
-        if: ${{ needs.params.outputs.aws_eks_create == 'true' }}
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.params.outputs.aws_region }}
       
-      - name: aws-eks-create
-        if: ${{ needs.params.outputs.aws_eks_create == 'true' }}
+      - name: vpc
         run: |
-          echo "TO BE IMPLEMENTED"
-          exit 1
-          make aws-eks-create ....
-  
-  aws-eks-namespace-test:
-    name: aws-eks-namespace-test
+          make aws-cloudformation-eks-vpc-stack-deploy
+          
+      - name: cluster
+        if .... use make aws-eks-cluster-exists in params...
+        run: |
+          if [[ make aws-eks-cluster-exists == True ]]
+          then
+            echo "Cluster already exists, nothing to do..."
+          else
+            echo "Cluster does not exist, creating it..."
+            exit 1
+            make aws-eks-cluster-create
+          fi
+          
+  deploy-TEST:
+    name: deploy
     runs-on: ubuntu-latest
-    needs: [params, aws-eks-create]
+    needs: [params, aws_eks_create_cluster, rasa_model, action_server]
     # TODO: REMOVE THIS LINE -- FOR DEVELOPMENT PURPOSES, ALWAYS RUN THIS...
     if: always()
     steps:          
@@ -354,10 +359,10 @@ jobs:
           exit 1
           
       
-  aws-eks-namespace-prod:
-    name: aws-eks-namespace-prod
+  deploy-PROD:
+    name: deploy-PRO
     runs-on: ubuntu-latest
-    needs: [params, aws-eks-namespace-test]
+    needs: [params, deploy-TEST]
     steps:          
       - run: |
           echo "TO BE IMPLEMENTED"
