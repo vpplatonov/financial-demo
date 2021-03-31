@@ -22,8 +22,8 @@ AWS_EKS_KEYPAIR_NAME := findemo
 AWS_EKS_CLUSTER_NAME := financial-demo-$(shell git branch --show-current)
 AWS_EKS_KUBERNETES_VERSION := 1.19
 
-AWS_EKS_NAMESPACE := rasa
-AWS_EKS_RELEASE_NAME := rasa
+AWS_EKS_NAMESPACE := my-namespace
+AWS_EKS_RELEASE_NAME := my-release
 
 help:
 	@echo "make"
@@ -297,6 +297,8 @@ aws-eks-cluster-delete:
 	eksctl delete cluster \
 		--name $(AWS_EKS_CLUSTER_NAME) \
 		--region $(AWS_REGION) 
+	@echo $(NEWLINE)
+	@echo See AWS CloudFormation Console. The stack deletion is still in progress...
 
 aws-eks-cluster-exists:
 	@aws eks list-clusters \
@@ -371,24 +373,62 @@ aws-eks-cluster-update-kubeconfig:
 		--region $(AWS_REGION) \
 		--name $(AWS_EKS_CLUSTER_NAME)	
 
-rasa-x-deploy:
-	cat deploy/get-rasa-x | sudo bash
+aws-eks-namespace-create:
+	kubectl create namespace $(AWS_EKS_NAMESPACE)
+	
+aws-eks-docker-pull-secret-create:
+	kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		create secret docker-registry gcr-pull-secret \
+		--docker-server=gcr.io \
+		--docker-username=_json_key \
+		--docker-password='$(shell cat ./secret/gcr-auth.json)'
+	
+rasa-enterprise-deploy:
+	helm repo add rasa-x https://rasahq.github.io/rasa-x-helm
+	helm repo update
 
-rasa-x-get-pods:
+	@echo $(NEWLINE)
+	helm --namespace $(AWS_EKS_NAMESPACE) \
+		install $(AWS_EKS_RELEASE_NAME)\
+		--values ./secret/values.yml \
+		rasa-x/rasa-x
+	
+	@echo $(NEWLINE)	
+	$(shell make rasa-enterprise-wait)
+	
+rasa-enterprise-wait:
+	@echo Waiting until all deployments are AVAILABLE
+	kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		wait \
+		--for=condition=available \
+		--timeout=20m \
+		--all \
+		deployment
+	
+	@echo $(NEWLINE)
+	@echo Waiting until all pods are READY
+	kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		wait \
+		--for=condition=ready \
+		--timeout=20m \
+		--all \
+		pod
+		
+rasa-enterprise-get-pods:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get pods
 	
-rasa-x-get-secrets-postgresql:
+rasa-enterprise-get-secrets-postgresql:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get secret $(AWS_EKS_RELEASE_NAME)-postgresql -o yaml | \
 		awk -F ': ' '/password/{print $2}' | base64 -d
 		
-rasa-x-get-secrets-redis:
+rasa-enterprise-get-secrets-redis:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get secret $(AWS_EKS_RELEASE_NAME)-redis -o yaml | \
 		awk -F ': ' '/password/{print $2}' | base64 -d
 		
-rasa-x-get-secrets-rabbit:
+rasa-enterprise-get-secrets-rabbit:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get secret $(AWS_EKS_RELEASE_NAME)-rabbit -o yaml | \
 		awk -F ': ' '/password/{print $2}' | base64 -d

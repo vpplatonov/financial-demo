@@ -309,11 +309,24 @@ jobs:
         run: |
           make install-eksctl
           make install-kubectl
-          make install-helm
           
       - name: cluster
         run: |
             make aws-eks-cluster-create
+            
+      - name: configure kubectl
+        run: |
+          make aws-eks-cluster-update-kubeconfig
+            
+      - name: create namespace
+        run: |
+            make aws-eks-namespace-create
+            
+      - name: Create pull secret
+        run: |
+          echo "TO DO: Create ./secret/gcr-auth.json"
+          exit 1
+          make aws-eks-docker-pull-secret-create
           
   deploy_TEST:
     name: deploy_TEST
@@ -338,23 +351,23 @@ jobs:
           make install-kubectl
           make install-helm
       
-      - name: Configure kubectl
+      - name: configure kubectl
         run: |
           make aws-eks-cluster-update-kubeconfig
           
-          # check that it works
-          make aws-eks-cluster-describe
-          
-      - name: Rasa X QuickInstall
+      - name: Create docker pull secret
         run: |
-          echo "TO BE IMPLEMENTED"
+          echo "TODO: GET LICENSE KEY FROM GITHUB SECRETS"
           exit 1
-          make rasa-x-deploy
+          make rasa-enterprise-deploy
           
-      - name: Create pull secret
+      - name: Rasa Enterprise Helm Chart Installation
         run: |
-          echo "TO BE IMPLEMENTED"
+          echo "TODO: GET SECRETS FROM GITHUB SECRETS"
           exit 1
+          make rasa-enterprise-deploy
+          
+      
           
       - name: Deploy same as PROD
         run: |
