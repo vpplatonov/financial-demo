@@ -18,12 +18,18 @@ env:
   AWS_ECR_REPOSITORY: financial-demo
   AWS_S3_BUCKET_NAME: rasa-financial-demo
   
+  # Notes: 
+  # (-) rasa & rasa-sdk versions are extracted from `requirements.txt`
+  # (-) check https://rasa.com/docs/rasa-x/changelog/compatibility-matrix/
+  RASA_ENTERPRISE_VERSION: "0.38.1"
+  
 jobs:
   params:
     name: params
     runs-on: ubuntu-latest
     # Map step outputs to job outputs, for use by downstream jobs
     outputs:
+      rasa_enterprise_version: ${{ steps.versions.outputs.rasa_enterprise_version }}
       rasa_version: ${{ steps.versions.outputs.rasa_version }}
       rasa_sdk_version: ${{ steps.versions.outputs.rasa_sdk_version }}
       
@@ -64,6 +70,7 @@ jobs:
           rasa_version=$( cat requirements.txt | grep 'rasa\[spacy\]' | cut -d'=' -f 3 )-spacy-en
           rasa_sdk_version=$( cat requirements.txt | grep 'rasa-sdk' | cut -d'=' -f 3 )
           
+          echo "::set-output name=rasa_enterprise_version::${{ env.RASA_ENTERPRISE_VERSION }}"
           echo "::set-output name=rasa_version::$rasa_version"
           echo "::set-output name=rasa_sdk_version::$rasa_sdk_version"
         
@@ -131,6 +138,7 @@ jobs:
     steps:
     - name: params_summary
       run: |
+        echo rasa_enterprise_version : ${{ needs.params.outputs.rasa_enterprise_version }}
         echo rasa_version : ${{ needs.params.outputs.rasa_version }}
         echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
         
@@ -365,7 +373,8 @@ jobs:
         run: |
           echo "TODO: GET SECRETS FROM GITHUB SECRETS"
           exit 1
-          make rasa-enterprise-deploy
+          make rasa-enterprise-deploy \
+            RASAX_TAG=${{ needs.params.outputs.rasa_enterprise_version }}
           
       
           

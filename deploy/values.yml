@@ -1,0 +1,42 @@
+# docker pull secret for private images
+images:
+    imagePullSecrets:
+    - name: "gcr-pull-secret"
+# rasax specific settings
+rasax:
+    tag: "set_as_environment_variable"
+    # name of the Rasa Enterprise image to use
+    name: "gcr.io/rasa-platform/rasa-x-ee"
+    # initialUser is the user which is created upon the initial start of Rasa Enterprise
+    initialUser:
+        # username specifies a name of this user
+        username: "set_as_environment_variable"
+        # password for the Rasa Enterprise user
+        password: "set_as_environment_variable"
+    # passwordSalt Rasa X uses to salt the user passwords
+    passwordSalt: "set_as_environment_variable"
+    # token Rasa X accepts as authentication token from other Rasa services
+    token: "set_as_environment_variable"
+    # jwtSecret which is used to sign the jwtTokens of the users
+    jwtSecret: "set_as_environment_variable"
+# rasa: Settings common for all Rasa containers
+rasa:
+    tag: "set_as_environment_variable"
+    # token Rasa accepts as authentication token from other Rasa services
+    token: "set_as_environment_variable"
+# RabbitMQ specific settings
+rabbitmq:
+    # rabbitmq settings of the subchart
+    rabbitmq:
+        # password which is used for the authentication
+        password: "set_as_environment_variable"
+# global settings of the used subcharts
+global:
+    # postgresql: global settings of the postgresql subchart
+    postgresql:
+        # postgresqlPassword is the password which is used when the postgresqlUsername equals "postgres"
+        postgresqlPassword: "set_as_environment_variable"
+    # redis: global settings of the redis subchart
+    redis:
+        # password to use in case there no external secret was provided
+        password: "set_as_environment_variable"

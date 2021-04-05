@@ -376,27 +376,54 @@ aws-eks-cluster-update-kubeconfig:
 aws-eks-namespace-create:
 	kubectl create namespace $(AWS_EKS_NAMESPACE)
 	
+aws-eks-namespace-delete:
+	kubectl delete namespace $(AWS_EKS_NAMESPACE)
+	
+	
 aws-eks-docker-pull-secret-create:
-	kubectl --namespace $(AWS_EKS_NAMESPACE) \
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		create secret docker-registry gcr-pull-secret \
 		--docker-server=gcr.io \
 		--docker-username=_json_key \
 		--docker-password='$(shell cat ./secret/gcr-auth.json)'
-	
-rasa-enterprise-deploy:
+
+rasa-enterprise-install:
+	@[ "${RASAX_TAG}" ]								|| ( echo ">> RASAX_TAG is not set"; exit 1 )
+	@[ "${RASAX_INITIALUSER_USERNAME}" ]			|| ( echo ">> RASAX_INITIALUSER_USERNAME is not set"; exit 1 )
+	@[ "${RASAX_INITIALUSER_PASSWORD}" ]			|| ( echo ">> RASAX_INITIALUSER_PASSWORD is not set"; exit 1 )
+	@[ "${RASAX_PASSWORDSALT}" ]					|| ( echo ">> RASAX_PASSWORDSALT is not set"; exit 1 )
+	@[ "${RASAX_TOKEN}" ]							|| ( echo ">> RASAX_TOKEN is not set"; exit 1 )
+	@[ "${RASAX_JWTSECRET}" ]						|| ( echo ">> RASAX_JWTSECRET is not set"; exit 1 )
+	@[ "${RASA_TAG}" ]								|| ( echo ">> RASA_TAG is not set"; exit 1 )
+	@[ "${RASA_TOKEN}" ]							|| ( echo ">> RASA_TOKEN is not set"; exit 1 )
+	@[ "${RABBITMQ_RABBITMQ_PASSWORD}" ]			|| ( echo ">> RABBITMQ_RABBITMQ_PASSWORD is not set"; exit 1 )
+	@[ "${GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD}" ]	|| ( echo ">> GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD is not set"; exit 1 )
+	@[ "${GLOBAL_REDIS_PASSWORD}" ]					|| ( echo ">> GLOBAL_REDIS_PASSWORD is not set"; exit 1 )
+
 	helm repo add rasa-x https://rasahq.github.io/rasa-x-helm
 	helm repo update
 
 	@echo $(NEWLINE)
-	helm --namespace $(AWS_EKS_NAMESPACE) \
+	@echo Installing Rasa Enterprise with:
+	@echo - RASAX_TAG: $(RASAX_TAG)
+	@echo $(NEWLINE)
+	@helm --namespace $(AWS_EKS_NAMESPACE) \
 		install $(AWS_EKS_RELEASE_NAME)\
-		--values ./secret/values.yml \
+		--values ./deploy/values.yml \
+		--set rasax.tag=$(RASAX_TAG) \
+		--set rasax.initialUser.username=$(RASAX_INITIALUSER_USERNAME) \
+		--set rasax.initialUser.password=$(RASAX_INITIALUSER_PASSWORD) \
+		--set rasax.passwordSalt=$(RASAX_PASSWORDSALT) \
+		--set rasax.token=$(RASAX_TOKEN) \
+		--set rasax.jwtSecret=$(RASAX_JWTSECRET) \
+		--set rasa.tag=$(RASA_TAG) \
+		--set rasa.token=$(RASA_TOKEN) \
+		--set rabbitmq.rabbitmq.password=$(RABBITMQ_RABBITMQ_PASSWORD) \
+		--set global.postgresql.postgresqlPassword=$(GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD) \
+		--set global.redis.password=$(GLOBAL_REDIS_PASSWORD) \
 		rasa-x/rasa-x
 	
 	@echo $(NEWLINE)	
-	$(shell make rasa-enterprise-wait)
-	
-rasa-enterprise-wait:
 	@echo Waiting until all deployments are AVAILABLE
 	kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		wait \
@@ -404,16 +431,13 @@ rasa-enterprise-wait:
 		--timeout=20m \
 		--all \
 		deployment
-	
+
+rasa-enterprise-uninstall:
+	@echo Uninstalling Rasa Enterprise release $(AWS_EKS_RELEASE_NAME).
 	@echo $(NEWLINE)
-	@echo Waiting until all pods are READY
-	kubectl --namespace $(AWS_EKS_NAMESPACE) \
-		wait \
-		--for=condition=ready \
-		--timeout=20m \
-		--all \
-		pod
-		
+	@helm --namespace $(AWS_EKS_NAMESPACE) \
+		uninstall $(AWS_EKS_RELEASE_NAME)
+	
 rasa-enterprise-get-pods:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get pods
