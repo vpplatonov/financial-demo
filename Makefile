@@ -155,6 +155,13 @@ aws-ecr-create-repository:
 		--repository-name $(AWS_ECR_REPOSITORY) \
 		--region $(AWS_REGION)
 
+aws-ecr-get-authorization-token:	
+	@aws ecr get-authorization-token \
+		--no-paginate \
+		--output text \
+		--region=$(AWS_REGION) \
+		--query authorizationData[].authorizationToken | base64 -d | cut -d: -f2
+		
 aws-ecr-get-repositoryUri:	
 	@aws ecr describe-repositories \
 		--no-paginate \
@@ -380,12 +387,41 @@ aws-eks-namespace-delete:
 	kubectl delete namespace $(AWS_EKS_NAMESPACE)
 	
 	
-aws-eks-docker-pull-secret-create:
+pull-secret-gcr-create:
+	@echo "Creating pull secret for Rasa Enterprise (in GCR)"
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		delete secret gcr-pull-secret \
+		--ignore-not-found
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		create secret docker-registry gcr-pull-secret \
 		--docker-server=gcr.io \
 		--docker-username=_json_key \
 		--docker-password='$(shell cat ./secret/gcr-auth.json)'
+		
+pull-secret-gcr-delete:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		delete secret gcr-pull-secret \
+		--ignore-not-found
+
+pull-secret-ecr-create:
+	@echo "Creating pull secret for Action Server (in ECR)"
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		delete secret ecr-pull-secret \
+		--ignore-not-found
+
+	@$(eval AWS_ECR_TOKEN := $(shell make aws-ecr-get-repositoryUri))
+	@$(eval AWS_ECR_URI := $(shell make aws-ecr-get-repositoryUri))
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		create secret docker-registry ecr-pull-secret \
+		--docker-server=https://$(AWS_ECR_URI) \
+		--docker-username=AWS \
+		--docker-password="$(AWS_ECR_TOKEN)"
+		
+pull-secret-ecr-delete:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		delete secret ecr-pull-secret \
+		--ignore-not-found
+		
 
 rasa-enterprise-install:
 	@[ "${RASAX_TAG}" ]								|| ( echo ">> RASAX_TAG is not set"; exit 1 )
@@ -399,6 +435,8 @@ rasa-enterprise-install:
 	@[ "${RABBITMQ_RABBITMQ_PASSWORD}" ]			|| ( echo ">> RABBITMQ_RABBITMQ_PASSWORD is not set"; exit 1 )
 	@[ "${GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD}" ]	|| ( echo ">> GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD is not set"; exit 1 )
 	@[ "${GLOBAL_REDIS_PASSWORD}" ]					|| ( echo ">> GLOBAL_REDIS_PASSWORD is not set"; exit 1 )
+	@[ "${APP_NAME}" ]								|| ( echo ">> APP_NAME is not set"; exit 1 )
+	@[ "${APP_TAG}" ]								|| ( echo ">> APP_TAG is not set"; exit 1 )
 
 	helm repo add rasa-x https://rasahq.github.io/rasa-x-helm
 	helm repo update
@@ -406,6 +444,9 @@ rasa-enterprise-install:
 	@echo $(NEWLINE)
 	@echo Installing Rasa Enterprise with:
 	@echo - RASAX_TAG: $(RASAX_TAG)
+	@echo - RASA_TAG: $(RASA_TAG)
+	@echo - APP_NAME: $(APP_NAME)
+	@echo - APP_TAG: $(APP_TAG)
 	@echo $(NEWLINE)
 	@helm --namespace $(AWS_EKS_NAMESPACE) \
 		install $(AWS_EKS_RELEASE_NAME)\
@@ -421,6 +462,8 @@ rasa-enterprise-install:
 		--set rabbitmq.rabbitmq.password=$(RABBITMQ_RABBITMQ_PASSWORD) \
 		--set global.postgresql.postgresqlPassword=$(GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD) \
 		--set global.redis.password=$(GLOBAL_REDIS_PASSWORD) \
+		--set app.name=$(APP_NAME) \
+		--set app.tag=$(APP_TAG) \
 		rasa-x/rasa-x
 	
 	@echo $(NEWLINE)	

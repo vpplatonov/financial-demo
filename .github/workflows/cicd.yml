@@ -363,11 +363,12 @@ jobs:
         run: |
           make aws-eks-cluster-update-kubeconfig
           
-      - name: Create docker pull secret
+      - name: Create image pull secrets
         run: |
-          echo "TODO: GET LICENSE KEY FROM GITHUB SECRETS"
+          echo "TODO: GET ITEMS FROM GITHUB SECRETS"
           exit 1
-          make rasa-enterprise-deploy
+          make pull-secret-gcr-create
+          make pull-secret-ecr-create
           
       - name: Rasa Enterprise Helm Chart Installation
         run: |

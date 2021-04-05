@@ -2,6 +2,11 @@
 images:
     imagePullSecrets:
     - name: "gcr-pull-secret"
+    - name: "ecr-pull-secret"
+# action server image
+app:
+    name: "set_as_environment_variable"
+    tag: "set_as_environment_variable"
 # rasax specific settings
 rasax:
     tag: "set_as_environment_variable"
