@@ -338,11 +338,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.params.outputs.aws_region }}
       
-      - name: install CLIs
+      - name: install CLIs & dependencies
         run: |
           make install-eksctl
           make install-kubectl
           make install-helm
+          make install-jp
 
       - name: configure kubectl
         run: |
@@ -383,6 +384,10 @@ jobs:
           APP_TAG: ${{ needs.params.outputs.docker_tag }}
         run: |
           make rasa-enterprise-install
+          
+      - name: Check Rasa Enterprise Health
+        run: |
+          make rasa-enterprise-check-health
           
       - name: Deploy rasa model
         run: |

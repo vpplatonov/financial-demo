@@ -25,6 +25,8 @@ AWS_EKS_KUBERNETES_VERSION := 1.19
 AWS_EKS_NAMESPACE := my-namespace
 AWS_EKS_RELEASE_NAME := my-release
 
+GIT_BRANCH_NAME := $(shell git branch --show-current)
+
 help:
 	@echo "make"
 	@echo "	clean"
@@ -76,12 +78,17 @@ install-eksctl:
 install-kubectl:
 	sudo snap install kubectl --classic
 	@echo $(NEWLINE)
-	sudo kubectl version --client --short
+	@kubectl version --client --short
 
 install-helm:
 	sudo snap install helm --classic
 	@echo $(NEWLINE)
-	helm version --short
+	@helm version --short
+	
+install-jp:
+	sudo apt-get update && sudo apt-get install jp
+	@echo $(NEWLINE)
+	@jp --version
 	
 rasa-train:
 	@echo Training $(RASA_MODEL_NAME)
@@ -301,6 +308,7 @@ aws-eks-cluster-info:
 	
 # https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
 aws-eks-cluster-delete:
+	@[ "${GIT_BRANCH_NAME}" != "main" ]	|| ( echo ">> You are on main branch. Deletion via Makefile not allowed"; exit 1 )
 	eksctl delete cluster \
 		--name $(AWS_EKS_CLUSTER_NAME) \
 		--region $(AWS_REGION) 
@@ -384,6 +392,7 @@ aws-eks-namespace-create:
 	kubectl create namespace $(AWS_EKS_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	
 aws-eks-namespace-delete:
+	@[ "${GIT_BRANCH_NAME}" != "main" ]	|| ( echo ">> You are on main branch. Deletion via Makefile not allowed"; exit 1 )
 	kubectl delete namespace $(AWS_EKS_NAMESPACE)
 	
 	
@@ -480,12 +489,16 @@ rasa-enterprise-install:
 	
 	@echo $(NEWLINE)	
 	@echo Waiting until all deployments are AVAILABLE
-	kubectl --namespace $(AWS_EKS_NAMESPACE) \
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		wait \
 		--for=condition=available \
 		--timeout=20m \
 		--all \
 		deployment
+		
+	@echo $(NEWLINE)
+	@$(eval RASA_ENTERPRISE_LOGIN := $(shell make rasa-enterprise-get-login))
+	@echo login at: $(RASA_ENTERPRISE_LOGIN)
 
 rasa-enterprise-uninstall:
 	@echo Uninstalling Rasa Enterprise release $(AWS_EKS_RELEASE_NAME).
@@ -511,3 +524,32 @@ rasa-enterprise-get-secrets-rabbit:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		get secret $(AWS_EKS_RELEASE_NAME)-rabbit -o yaml | \
 		awk -F ': ' '/password/{print $2}' | base64 -d
+
+rasa-enterprise-get-base-url:
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		get service $(AWS_EKS_RELEASE_NAME)-rasa-x-nginx \
+		--output jsonpath='{.status.loadBalancer.ingress[0].hostname}' | \
+		awk '{v="http://"$$1":8000"; print v}'
+	
+rasa-enterprise-get-login:
+	@$(eval RASA_ENTERPRISE_LOGIN := $(shell make rasa-enterprise-get-base-url)/login)
+	@echo $(RASA_ENTERPRISE_LOGIN)
+	
+rasa-enterprise-check-health:
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/health)
+	@echo Checking health at: $(URL)	
+	@curl --silent --request GET --url $(URL) | json_pp
+
+	@$(eval PRODUCTION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp production.status))
+	@[ "${PRODUCTION_STATUS}" = "200" ]	|| ( echo ">> production.status not ok"; exit 1 )
+	
+	@$(eval WORKER_STATUS := $(shell curl --silent --request GET --url $(URL) | jp worker.status))
+	@[ "${WORKER_STATUS}" = "200" ]	|| ( echo ">> worker.status not ok"; exit 1 )
+	
+	@$(eval DB_MIGRATION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp database_migration.status))
+	@[ "${DB_MIGRATION_STATUS}" = "completed" ]	|| ( echo ">> database_migration.status not completed"; exit 1 )
+
+rasa-enterprise-get-api-token:
+	@$(eval RASA_ENTERPRISE_API_AUTH := $(shell make rasa-enterprise-get-base-url)/api/auth)
+	@echo $(RASA_ENTERPRISE_API_AUTH)
+	
