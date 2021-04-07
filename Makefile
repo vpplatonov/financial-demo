@@ -381,14 +381,17 @@ aws-eks-cluster-update-kubeconfig:
 		--name $(AWS_EKS_CLUSTER_NAME)	
 
 aws-eks-namespace-create:
-	kubectl create namespace $(AWS_EKS_NAMESPACE)
+	kubectl create namespace $(AWS_EKS_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	
 aws-eks-namespace-delete:
 	kubectl delete namespace $(AWS_EKS_NAMESPACE)
 	
 	
 pull-secret-gcr-create:
-	@echo "Creating pull secret for Rasa Enterprise (in GCR)"
+	@[ "${GCR_AUTH_JSON_PRIVATE_KEY_ID}" ]	|| ( echo ">> GCR_AUTH_JSON_PRIVATE_KEY_ID is not set"; exit 1 )
+	@[ "${GCR_AUTH_JSON_PRIVATE_KEY}" ]		|| ( echo ">> GCR_AUTH_JSON_PRIVATE_KEY is not set"; exit 1 )
+	@[ "${GCR_AUTH_JSON_CLIENT_EMAIL}" ]	|| ( echo ">> GCR_AUTH_JSON_CLIENT_EMAIL is not set"; exit 1 )
+	@[ "${GCR_AUTH_JSON_CLIENT_ID}" ]		|| ( echo ">> GCR_AUTH_JSON_CLIENT_ID is not set"; exit 1 )
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		delete secret gcr-pull-secret \
 		--ignore-not-found
@@ -396,7 +399,12 @@ pull-secret-gcr-create:
 		create secret docker-registry gcr-pull-secret \
 		--docker-server=gcr.io \
 		--docker-username=_json_key \
-		--docker-password='$(shell cat ./secret/gcr-auth.json)'
+		--docker-password='$(shell python ./scripts/patch_gcr_auth_json.py)'
+#	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+#		create secret docker-registry gcr-pull-secret \
+#		--docker-server=gcr.io \
+#		--docker-username=_json_key \
+#		--docker-password='$(shell cat ./secret/gcr-auth.json)'
 		
 pull-secret-gcr-delete:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
@@ -409,7 +417,7 @@ pull-secret-ecr-create:
 		delete secret ecr-pull-secret \
 		--ignore-not-found
 
-	@$(eval AWS_ECR_TOKEN := $(shell make aws-ecr-get-repositoryUri))
+	@$(eval AWS_ECR_TOKEN := $(shell make aws-ecr-get-authorization-token))
 	@$(eval AWS_ECR_URI := $(shell make aws-ecr-get-repositoryUri))
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		create secret docker-registry ecr-pull-secret \

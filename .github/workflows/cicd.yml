@@ -321,20 +321,6 @@ jobs:
       - name: cluster
         run: |
             make aws-eks-cluster-create
-            
-      - name: configure kubectl
-        run: |
-          make aws-eks-cluster-update-kubeconfig
-            
-      - name: create namespace
-        run: |
-            make aws-eks-namespace-create
-            
-      - name: Create pull secret
-        run: |
-          echo "TO DO: Create ./secret/gcr-auth.json"
-          exit 1
-          make aws-eks-docker-pull-secret-create
           
   deploy_TEST:
     name: deploy_TEST
@@ -358,26 +344,26 @@ jobs:
           make install-eksctl
           make install-kubectl
           make install-helm
-      
+
       - name: configure kubectl
         run: |
           make aws-eks-cluster-update-kubeconfig
-          
-      - name: Create image pull secrets
+
+      - name: create namespace if not exists
         run: |
-          echo "TODO: GET ITEMS FROM GITHUB SECRETS"
-          exit 1
+            make aws-eks-namespace-create
+
+      - name: Create fresh image pull secrets
+        run: |
+          echo "TODO: SET GITHUB SECRETS AS ENVIRONMENT VARIABLES"
           make pull-secret-gcr-create
           make pull-secret-ecr-create
           
       - name: Rasa Enterprise Helm Chart Installation
         run: |
-          echo "TODO: GET SECRETS FROM GITHUB SECRETS"
-          exit 1
+          echo "TODO: SET GITHUB SECRETS AS ENVIRONMENT VARIABLES"
           make rasa-enterprise-deploy \
             RASAX_TAG=${{ needs.params.outputs.rasa_enterprise_version }}
-          
-      
           
       - name: Deploy same as PROD
         run: |
