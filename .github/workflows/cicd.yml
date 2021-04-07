@@ -353,22 +353,37 @@ jobs:
         run: |
             make aws-eks-namespace-create
 
-      - name: Create fresh image pull secrets
+      - name: fresh gcr-pull-secret
+        env:
+          GCR_AUTH_JSON_PRIVATE_KEY_ID: ${{ secrets.GCR_AUTH_JSON_PRIVATE_KEY_ID }}
+          GCR_AUTH_JSON_PRIVATE_KEY: ${{ secrets.GCR_AUTH_JSON_PRIVATE_KEY }}
+          GCR_AUTH_JSON_CLIENT_EMAIL: ${{ secrets.GCR_AUTH_JSON_CLIENT_EMAIL }}
+          GCR_AUTH_JSON_CLIENT_ID: ${{ secrets.GCR_AUTH_JSON_CLIENT_ID }}
         run: |
-          echo "TODO: SET GITHUB SECRETS AS ENVIRONMENT VARIABLES"
           make pull-secret-gcr-create
+          
+      - name: fresh ecr-pull-secret
+        run: |
           make pull-secret-ecr-create
           
-      - name: Rasa Enterprise Helm Chart Installation
-        run: |
-          echo "TODO: SET GITHUB SECRETS AS ENVIRONMENT VARIABLES"
-          make rasa-enterprise-deploy \
-            RASAX_TAG=${{ needs.params.outputs.rasa_enterprise_version }}
+      - name: Install or Upgrade Rasa Enterprise
+        env:
+          GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD: ${{ secrets.GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD }}
+          GLOBAL_REDIS_PASSWORD: ${{ secrets.GLOBAL_REDIS_PASSWORD }}
+          RABBITMQ_RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_RABBITMQ_PASSWORD }}
+          RASAX_INITIALUSER_USERNAME: ${{ secrets.RASAX_INITIALUSER_USERNAME }}
+          RASAX_INITIALUSER_PASSWORD: ${{ secrets.RASAX_INITIALUSER_PASSWORD }}
+          RASAX_JWTSECRET: ${{ secrets.RASAX_JWTSECRET }}
+          RASAX_PASSWORDSALT: ${{ secrets.RASAX_PASSWORDSALT }}
+          RASAX_TOKEN: ${{ secrets.RASAX_TOKEN }}
+          RASA_TOKEN: ${{ secrets.RASA_TOKEN }}
           
-      - name: Deploy same as PROD
+          RASAX_TAG: ${{ needs.params.outputs.rasa_enterprise_version }}
+          RASA_TAG: ${{ needs.params.outputs.rasa_version }}
+          APP_NAME: ${{ needs.params.outputs.docker_registry }}/${{ needs.params.outputs.docker_image }}
+          APP_TAG: ${{ needs.params.outputs.docker_tag }}
         run: |
-          echo "TO BE IMPLEMENTED"
-          exit 1
+          make rasa-enterprise-install
           
       - name: Smoketest
         run: |
@@ -377,7 +392,7 @@ jobs:
           
       - name: Upgrade to new
         run: |
-          echo "TO BE IMPLEMENTED"
+          echo "TO BE IMPLEMENTED, first install same as in prod, then upgrade"
           exit 1
           
       - name: Smoketest

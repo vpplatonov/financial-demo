@@ -430,19 +430,21 @@ pull-secret-ecr-delete:
 		delete secret ecr-pull-secret \
 		--ignore-not-found
 		
+rasa-enterprise-all: aws-eks-namespace-create pull-secret-gcr-create pull-secret-ecr-create rasa-enterprise-install
 
 rasa-enterprise-install:
-	@[ "${RASAX_TAG}" ]								|| ( echo ">> RASAX_TAG is not set"; exit 1 )
-	@[ "${RASAX_INITIALUSER_USERNAME}" ]			|| ( echo ">> RASAX_INITIALUSER_USERNAME is not set"; exit 1 )
-	@[ "${RASAX_INITIALUSER_PASSWORD}" ]			|| ( echo ">> RASAX_INITIALUSER_PASSWORD is not set"; exit 1 )
-	@[ "${RASAX_PASSWORDSALT}" ]					|| ( echo ">> RASAX_PASSWORDSALT is not set"; exit 1 )
-	@[ "${RASAX_TOKEN}" ]							|| ( echo ">> RASAX_TOKEN is not set"; exit 1 )
-	@[ "${RASAX_JWTSECRET}" ]						|| ( echo ">> RASAX_JWTSECRET is not set"; exit 1 )
-	@[ "${RASA_TAG}" ]								|| ( echo ">> RASA_TAG is not set"; exit 1 )
-	@[ "${RASA_TOKEN}" ]							|| ( echo ">> RASA_TOKEN is not set"; exit 1 )
-	@[ "${RABBITMQ_RABBITMQ_PASSWORD}" ]			|| ( echo ">> RABBITMQ_RABBITMQ_PASSWORD is not set"; exit 1 )
 	@[ "${GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD}" ]	|| ( echo ">> GLOBAL_POSTGRESQL_POSTGRESQLPASSWORD is not set"; exit 1 )
 	@[ "${GLOBAL_REDIS_PASSWORD}" ]					|| ( echo ">> GLOBAL_REDIS_PASSWORD is not set"; exit 1 )
+	@[ "${RABBITMQ_RABBITMQ_PASSWORD}" ]			|| ( echo ">> RABBITMQ_RABBITMQ_PASSWORD is not set"; exit 1 )
+	@[ "${RASAX_INITIALUSER_USERNAME}" ]			|| ( echo ">> RASAX_INITIALUSER_USERNAME is not set"; exit 1 )
+	@[ "${RASAX_INITIALUSER_PASSWORD}" ]			|| ( echo ">> RASAX_INITIALUSER_PASSWORD is not set"; exit 1 )
+	@[ "${RASAX_JWTSECRET}" ]						|| ( echo ">> RASAX_JWTSECRET is not set"; exit 1 )
+	@[ "${RASAX_PASSWORDSALT}" ]					|| ( echo ">> RASAX_PASSWORDSALT is not set"; exit 1 )
+	@[ "${RASAX_TOKEN}" ]							|| ( echo ">> RASAX_TOKEN is not set"; exit 1 )
+	@[ "${RASA_TOKEN}" ]							|| ( echo ">> RASA_TOKEN is not set"; exit 1 )
+	
+	@[ "${RASAX_TAG}" ]								|| ( echo ">> RASAX_TAG is not set"; exit 1 )	
+	@[ "${RASA_TAG}" ]								|| ( echo ">> RASA_TAG is not set"; exit 1 )
 	@[ "${APP_NAME}" ]								|| ( echo ">> APP_NAME is not set"; exit 1 )
 	@[ "${APP_TAG}" ]								|| ( echo ">> APP_TAG is not set"; exit 1 )
 
@@ -450,14 +452,15 @@ rasa-enterprise-install:
 	helm repo update
 
 	@echo $(NEWLINE)
-	@echo Installing Rasa Enterprise with:
+	@echo Installing or Upgrading Rasa Enterprise with:
 	@echo - RASAX_TAG: $(RASAX_TAG)
 	@echo - RASA_TAG: $(RASA_TAG)
 	@echo - APP_NAME: $(APP_NAME)
 	@echo - APP_TAG: $(APP_TAG)
 	@echo $(NEWLINE)
 	@helm --namespace $(AWS_EKS_NAMESPACE) \
-		install $(AWS_EKS_RELEASE_NAME)\
+		upgrade \
+		--install \
 		--values ./deploy/values.yml \
 		--set rasax.tag=$(RASAX_TAG) \
 		--set rasax.initialUser.username=$(RASAX_INITIALUSER_USERNAME) \
@@ -472,6 +475,7 @@ rasa-enterprise-install:
 		--set global.redis.password=$(GLOBAL_REDIS_PASSWORD) \
 		--set app.name=$(APP_NAME) \
 		--set app.tag=$(APP_TAG) \
+		$(AWS_EKS_RELEASE_NAME) \
 		rasa-x/rasa-x
 	
 	@echo $(NEWLINE)	
