@@ -143,7 +143,6 @@ jobs:
         echo rasa_sdk_version : ${{ needs.params.outputs.rasa_sdk_version }}
         
         echo do_action_server: ${{ needs.params.outputs.do_action_server }}
-        echo docker_registry: ${{ env.AWS_ECR_URI }}
         echo docker_user : ${{ needs.params.outputs.docker_user }}
         echo docker_image : ${{ needs.params.outputs.docker_image }}
         echo docker_tag: ${{ needs.params.outputs.docker_tag }}
@@ -380,7 +379,7 @@ jobs:
           
           RASAX_TAG: ${{ needs.params.outputs.rasa_enterprise_version }}
           RASA_TAG: ${{ needs.params.outputs.rasa_version }}
-          APP_NAME: ${{ needs.params.outputs.docker_registry }}/${{ needs.params.outputs.docker_image }}
+          APP_NAME: ${{ env.AWS_ECR_URI }}/${{ needs.params.outputs.docker_image }}
           APP_TAG: ${{ needs.params.outputs.docker_tag }}
         run: |
           make rasa-enterprise-install
