@@ -384,6 +384,11 @@ jobs:
         run: |
           make rasa-enterprise-install
           
+      - name: Deploy rasa model
+        run: |
+          echo "TO DO"
+          exit 1
+          
       - name: Smoketest
         run: |
           echo "TO BE IMPLEMENTED"
