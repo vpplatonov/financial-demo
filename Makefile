@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 ACTION_SERVER_DOCKERPATH := financial-demo:test
 ACTION_SERVER_DOCKERNAME := financial-demo
 ACTION_SERVER_PORT := 5056
@@ -189,30 +191,14 @@ aws-s3-delete-bucket:
 	@echo deleting s3 bucket: $(AWS_S3_BUCKET_NAME)
 	aws s3 rb s3://$(AWS_S3_BUCKET_NAME) --force
 
-aws-s3-copy-rasa-model:
-	@echo copying $(RASA_MODEL_PATH) to s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
+aws-s3-upload-rasa-model:
+	@echo uploading $(RASA_MODEL_PATH) to s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
 	aws s3 cp $(RASA_MODEL_PATH) s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
 
-#aws-cloudformation-eks-vpc-stack-exists:
-#	@aws cloudformation describe-stacks \
-#		--no-paginate \
-#		--output text \
-#		--region $(AWS_REGION) \
-#		--query "contains(Stacks[*].StackName, '$(AWS_EKS_VPC_STACK_NAME)')"	
-		
-#aws-cloudformation-eks-vpc-stack-deploy:
-#	@aws cloudformation deploy \
-#		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-#		--template-file $(AWS_EKS_VPC_TEMPLATE)
+aws-s3-download-rasa-model:
+	@echo downloading $(RASA_MODEL_PATH) from s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH)
+	aws s3 cp s3://$(AWS_S3_BUCKET_NAME)/$(RASA_MODEL_PATH) $(RASA_MODEL_PATH) 
 
-#aws-cloudformation-eks-vpc-stack-status:	
-#	@aws cloudformation describe-stacks \
-#		--no-paginate \
-#		--output text \
-#		--region $(AWS_REGION) \
-#		--stack-name $(AWS_EKS_VPC_STACK_NAME) \
-#		--query "Stacks[].StackStatus"
-		
 aws-cloudformation-eks-get-SubnetsPrivate:	
 	@aws cloudformation describe-stacks \
 		--no-paginate \
@@ -321,30 +307,6 @@ aws-eks-cluster-exists:
 		--output text \
 		--region $(AWS_REGION) \
 		--query "contains(clusters[*], '$(AWS_EKS_CLUSTER_NAME)')"	
-			
-#aws-eks-cluster-create-OLD:
-#	@$(eval AWS_EKS_CLUSTER_ROLE_ARN := $(shell make aws-iam-role-get-Arn))
-#	@$(eval AWS_EKS_SECURITY_GROUP_IDS := $(shell make aws-cloudformation-eks-vpc-get-SecurityGroups))
-#	@$(eval AWS_EKS_SUBNET_IDS=$(shell make aws-cloudformation-eks-vpc-get-SubnetIds))
-#	@echo Creating an AWS EKS cluster with:
-#	@echo - AWS_EKS_CLUSTER_NAME              : $(AWS_EKS_CLUSTER_NAME)
-#	@echo - AWS_EKS_CLUSTER_ROLE_ARN      : $(AWS_EKS_CLUSTER_ROLE_ARN)
-#	@echo - AWS_EKS_SECURITY_GROUP_IDS: $(AWS_EKS_SECURITY_GROUP_IDS)
-#	@echo - AWS_EKS_SUBNET_IDS        : $(AWS_EKS_SUBNET_IDS)
-#	@echo $(NEWLINE)
-#	aws eks create-cluster \
-#		--no-paginate \
-#		--output text \
-#		--region $(AWS_REGION) \
-#		--name $(AWS_EKS_CLUSTER_NAME) \
-#		--kubernetes-version $(AWS_EKS_KUBERNETES_VERSION) \
-#		--role-arn $(AWS_EKS_CLUSTER_ROLE_ARN) \
-#		--resources-vpc-config subnetIds=$(AWS_EKS_SUBNET_IDS),securityGroupIds=$(AWS_EKS_SECURITY_GROUP_IDS)		
-
-#aws-eks-wait-cluster-active:	
-#	@aws eks wait cluster-active \
-#		--region $(AWS_REGION) \
-#		--name $(AWS_EKS_CLUSTER_NAME)
 		
 aws-eks-cluster-describe:	
 	@aws eks describe-cluster \
@@ -421,13 +383,14 @@ pull-secret-gcr-delete:
 		--ignore-not-found
 
 pull-secret-ecr-create:
+	@$(eval AWS_ECR_TOKEN := $(shell make aws-ecr-get-authorization-token))
+	@$(eval AWS_ECR_URI := $(shell make aws-ecr-get-repositoryUri))
+	
 	@echo "Creating pull secret for Action Server (in ECR)"
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		delete secret ecr-pull-secret \
 		--ignore-not-found
 
-	@$(eval AWS_ECR_TOKEN := $(shell make aws-ecr-get-authorization-token))
-	@$(eval AWS_ECR_URI := $(shell make aws-ecr-get-repositoryUri))
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
 		create secret docker-registry ecr-pull-secret \
 		--docker-server=https://$(AWS_ECR_URI) \
@@ -497,8 +460,7 @@ rasa-enterprise-install:
 		deployment
 		
 	@echo $(NEWLINE)
-	@$(eval RASA_ENTERPRISE_LOGIN := $(shell make rasa-enterprise-get-login))
-	@echo login at: $(RASA_ENTERPRISE_LOGIN)
+	@echo login at: $(shell make rasa-enterprise-get-login)
 
 rasa-enterprise-uninstall:
 	@echo Uninstalling Rasa Enterprise release $(AWS_EKS_RELEASE_NAME).
@@ -537,19 +499,77 @@ rasa-enterprise-get-login:
 	
 rasa-enterprise-check-health:
 	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/health)
+	@$(eval PRODUCTION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp production.status))
+	@$(eval WORKER_STATUS := $(shell curl --silent --request GET --url $(URL) | jp worker.status))
+	@$(eval DB_MIGRATION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp database_migration.status))
+	
 	@echo Checking health at: $(URL)	
 	@curl --silent --request GET --url $(URL) | json_pp
 
-	@$(eval PRODUCTION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp production.status))
 	@[ "${PRODUCTION_STATUS}" = "200" ]	|| ( echo ">> production.status not ok"; exit 1 )
-	
-	@$(eval WORKER_STATUS := $(shell curl --silent --request GET --url $(URL) | jp worker.status))
+		
 	@[ "${WORKER_STATUS}" = "200" ]	|| ( echo ">> worker.status not ok"; exit 1 )
 	
-	@$(eval DB_MIGRATION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp database_migration.status))
-	@[ "${DB_MIGRATION_STATUS}" = "completed" ]	|| ( echo ">> database_migration.status not completed"; exit 1 )
+	@[ "${DB_MIGRATION_STATUS}" = "completed" ]	|| ( echo ">> database_migration.status not completed (not fatal)" )
 
-rasa-enterprise-get-api-token:
-	@$(eval RASA_ENTERPRISE_API_AUTH := $(shell make rasa-enterprise-get-base-url)/api/auth)
-	@echo $(RASA_ENTERPRISE_API_AUTH)
+rasa-enterprise-get-access-token:
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/auth)
+	@curl --silent --request POST --url $(URL) \
+		--header 'Content-Type: application/json' \
+		--data '{ "username": "$(RASAX_INITIALUSER_USERNAME)", "password": "$(RASAX_INITIALUSER_PASSWORD)" }' \
+		| jp --unquoted access_token
+
+rasa-enterprise-model-upload:
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/projects/default/models)
+	@$(eval ACCESS_TOKEN := $(shell make rasa-enterprise-get-access-token))
+	@$(eval CURL_OUTPUT_FILE := /tmp/curl_output_$(shell date +'%y%m%d_%H%M%S').txt)
 	
+	@echo "Uploading model:"
+	@echo "- Model: $(RASA_MODEL_PATH)"
+	@echo "- URL: $(URL)"	
+	@curl -k \
+		--progress-bar \
+		--output $(CURL_OUTPUT_FILE) \
+		--request POST \
+		--url "$(URL)" \
+		-F "model=@$(RASA_MODEL_PATH)" \
+		-H "Authorization: Bearer $(ACCESS_TOKEN)"
+	
+	@cat $(CURL_OUTPUT_FILE) | json_pp
+
+	@echo $(NEWLINE)
+	@if [[ $$(cat ${CURL_OUTPUT_FILE} | jp message) == "null" ]]; then \
+		echo "Upload was successful"; \
+		rm -f ${CURL_OUTPUT_FILE}; \
+	else \
+		echo "Error: $$(cat ${CURL_OUTPUT_FILE} | jp message)"; \
+		rm -f ${CURL_OUTPUT_FILE}; \
+		exit 1; \
+	fi
+
+
+rasa-enterprise-model-tag:	
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/projects/default/models/$(RASA_MODEL_NAME)/tags/production)
+	@$(eval ACCESS_TOKEN := $(shell make rasa-enterprise-get-access-token))
+	
+	@echo "Tagging as production the model:"
+	@echo "- Model: $(RASA_MODEL_NAME)"
+	@echo "- URL: $(URL)"
+	
+	@curl \
+		--request PUT \
+		--url "$(URL)" \
+		-H "Authorization: Bearer $(ACCESS_TOKEN)"
+		
+rasa-enterprise-model-delete:	
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/projects/default/models/$(RASA_MODEL_NAME))
+	@$(eval ACCESS_TOKEN := $(shell make rasa-enterprise-get-access-token))
+	
+	@echo "Deleting the model:"
+	@echo "- Model: $(RASA_MODEL_NAME)"
+	@echo "- URL: $(URL)"
+	
+	@curl \
+		--request DELETE \
+		--url "$(URL)" \
+		-H "Authorization: Bearer $(ACCESS_TOKEN)"

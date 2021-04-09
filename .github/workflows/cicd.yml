@@ -293,7 +293,7 @@ jobs:
           
       - name: Upload rasa model to S3
         run: |
-          make aws-s3-copy-rasa-model \
+          make aws-s3-upload-rasa-model \
             RASA_MODEL_PATH=${{ needs.params.outputs.rasa_model_path }}
 
   aws_eks_create_cluster:
@@ -353,7 +353,7 @@ jobs:
         run: |
             make aws-eks-namespace-create
 
-      - name: fresh gcr-pull-secret
+      - name: create/refresh gcr-pull-secret
         env:
           GCR_AUTH_JSON_PRIVATE_KEY_ID: ${{ secrets.GCR_AUTH_JSON_PRIVATE_KEY_ID }}
           GCR_AUTH_JSON_PRIVATE_KEY: ${{ secrets.GCR_AUTH_JSON_PRIVATE_KEY }}
@@ -362,7 +362,7 @@ jobs:
         run: |
           make pull-secret-gcr-create
           
-      - name: fresh ecr-pull-secret
+      - name: create/refresh ecr-pull-secret
         run: |
           make pull-secret-ecr-create
           
@@ -390,9 +390,18 @@ jobs:
           make rasa-enterprise-check-health
           
       - name: Deploy rasa model
+        env:
+          RASAX_INITIALUSER_USERNAME: ${{ secrets.RASAX_INITIALUSER_USERNAME }}
+          RASAX_INITIALUSER_PASSWORD: ${{ secrets.RASAX_INITIALUSER_PASSWORD }}
+          
+          RASA_MODEL_NAME: ${{ needs.params.outputs.rasa_model_name }}
+          RASA_MODEL_PATH: ${{ needs.params.outputs.rasa_model_path }}
         run: |
-          echo "TO DO"
-          exit 1
+          make aws-s3-download-rasa-model
+          make rasa-enterprise-model-delete
+          make rasa-enterprise-model-upload
+          sleep 2
+          make rasa-enterprise-model-tag
           
       - name: Smoketest
         run: |
