@@ -459,14 +459,39 @@ rasa-enterprise-install:
 		--all \
 		deployment
 		
-	@echo $(NEWLINE)
-	@echo login at: $(shell make rasa-enterprise-get-login)
-
+	@echo $(NEWLINE)	
+	@echo Waiting until all pods are READY
+	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
+		wait \
+		--for=condition=ready \
+		--timeout=20m \
+		--all \
+		pod
+	
+	@echo $(NEWLINE)	
+	@echo Waiting for external IP assignment	
+	@./scripts/wait_for_external_ip.sh $(AWS_EKS_NAMESPACE) $(AWS_EKS_RELEASE_NAME)
+	
 rasa-enterprise-uninstall:
 	@echo Uninstalling Rasa Enterprise release $(AWS_EKS_RELEASE_NAME).
 	@echo $(NEWLINE)
 	@helm --namespace $(AWS_EKS_NAMESPACE) \
 		uninstall $(AWS_EKS_RELEASE_NAME)
+
+rasa-enterprise-check-health:
+	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/health)
+	@$(eval PRODUCTION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp production.status))
+	@$(eval WORKER_STATUS := $(shell curl --silent --request GET --url $(URL) | jp worker.status))
+	@$(eval DB_MIGRATION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp database_migration.status))
+	
+	@echo Checking health at: $(URL)	
+	@curl --silent --request GET --url $(URL) | json_pp
+
+	@[ "${PRODUCTION_STATUS}" = "200" ]	|| ( echo ">> production.status not ok"; exit 1 )
+		
+	@[ "${WORKER_STATUS}" = "200" ]	|| ( echo ">> worker.status not ok"; exit 1 )
+	
+	@[ "${DB_MIGRATION_STATUS}" = "completed" ]	|| ( echo ">> database_migration.status not completed (not fatal)" )
 	
 rasa-enterprise-get-pods:
 	@kubectl --namespace $(AWS_EKS_NAMESPACE) \
@@ -494,24 +519,8 @@ rasa-enterprise-get-base-url:
 		awk '{v="http://"$$1":8000"; print v}'
 	
 rasa-enterprise-get-login:
-	@$(eval RASA_ENTERPRISE_LOGIN := $(shell make rasa-enterprise-get-base-url)/login)
-	@echo $(RASA_ENTERPRISE_LOGIN)
+	@./scripts/wait_for_external_ip.sh $(AWS_EKS_NAMESPACE) $(AWS_EKS_RELEASE_NAME) 1
 	
-rasa-enterprise-check-health:
-	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/health)
-	@$(eval PRODUCTION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp production.status))
-	@$(eval WORKER_STATUS := $(shell curl --silent --request GET --url $(URL) | jp worker.status))
-	@$(eval DB_MIGRATION_STATUS := $(shell curl --silent --request GET --url $(URL) | jp database_migration.status))
-	
-	@echo Checking health at: $(URL)	
-	@curl --silent --request GET --url $(URL) | json_pp
-
-	@[ "${PRODUCTION_STATUS}" = "200" ]	|| ( echo ">> production.status not ok"; exit 1 )
-		
-	@[ "${WORKER_STATUS}" = "200" ]	|| ( echo ">> worker.status not ok"; exit 1 )
-	
-	@[ "${DB_MIGRATION_STATUS}" = "completed" ]	|| ( echo ">> database_migration.status not completed (not fatal)" )
-
 rasa-enterprise-get-access-token:
 	@$(eval URL := $(shell make rasa-enterprise-get-base-url)/api/auth)
 	@curl --silent --request POST --url $(URL) \
